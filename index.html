@@ -1919,6 +1919,7 @@
     var code = e && e.code ? String(e.code) : '';
     sync.detail = code==='permission-denied' ? 'permission denied — publish the Firestore rules from the setup steps'
                 : code==='unavailable' ? 'cannot reach the database right now'
+                : code==='rest/404' ? 'Firestore REST says this database was not found — verify the Firebase project ID and database ID'
                 : (code || (e && e.message) || 'error');
     setSyncStatus('error');
   }
@@ -2070,15 +2071,16 @@
     if(Object.prototype.hasOwnProperty.call(v,'timestampValue')) return v.timestampValue;
     return null;
   }
-  async function restFetch(url, options, user){
+  async function restFetch(url, options, user, label){
     var token=await user.getIdToken();
     var headers=options && options.headers ? options.headers : {};
     headers.Authorization='Bearer '+token;
     var response=await fetch(url, Object.assign({}, options||{}, {headers:headers}));
     if(!response.ok){
-      var body=await response.json();
-      var message=body && body.error && body.error.message ? body.error.message : response.statusText;
-      var error=new Error('Firestore REST '+response.status+': '+message);
+      var text=await response.text(), body=null;
+      try{ body=JSON.parse(text); }catch(e){}
+      var message=body && body.error && body.error.message ? body.error.message : (text || response.statusText);
+      var error=new Error('Firestore REST '+response.status+(label ? ' ('+label+')' : '')+': '+message);
       error.code='rest/'+response.status;
       error.status=response.status;
       throw error;
@@ -2098,7 +2100,7 @@
       var url=restRoot()+'/'+path;
       var current=null;
       try{
-        current=await restFetch(url, {method:'GET'}, user);
+        current=await restFetch(url, {method:'GET'}, user, 'GET document');
       }catch(e){
         if(e.status!==404) throw e;
       }
@@ -2117,7 +2119,7 @@
       if(updateTime) patchUrl.searchParams.set('currentDocument.updateTime', updateTime);
       else patchUrl.searchParams.set('currentDocument.exists','false');
       try{
-        await restFetch(patchUrl.toString(), {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}, user);
+        await restFetch(patchUrl.toString(), {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}, user, 'PATCH document');
         return;
       }catch(e){
         if((e.status===400 || e.status===409) && attempt<2) continue;
@@ -2133,7 +2135,7 @@
       from:[{collectionId:collection}],
       where:{fieldFilter:{field:{fieldPath:'u'},op:'GREATER_THAN',value:{integerValue:String(lastSeen)}}}
     }};
-    var rows=await restFetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},user);
+    var rows=await restFetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},user,'runQuery '+collection);
     if(sync.user!==user || !sync.restActive) return;
     var max=lastSeen, changed=false, seen={};
     (rows||[]).forEach(function(row){

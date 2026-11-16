@@ -289,6 +289,31 @@
     .cal-grid{gap:3px;}
     .toast{bottom:78px;}
   }
+
+  /* ===== SYLLABUS IMPORT CSS START ===== */
+  .syllabus-modal{max-width:760px;max-height:90vh;overflow:auto;}
+  .syllabus-modal textarea{width:100%;min-height:180px;padding:11px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2);color:var(--text);font-size:13px;resize:vertical;line-height:1.5;}
+  .syllabus-modal input[type=file]{font-size:12px;color:var(--slate);}
+  .syllabus-hint,.syllabus-message,.syllabus-warning{font-size:11.5px;color:var(--slate);line-height:1.5;}
+  .syllabus-message{min-height:18px;margin:8px 0;color:#7FD9CB;}
+  .syllabus-warning{color:#F0B876;}
+  .syllabus-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0;}
+  .syllabus-preview{max-height:43vh;overflow:auto;margin:12px 0;border-top:1px solid var(--line);}
+  .syllabus-preview-row{display:grid;grid-template-columns:auto minmax(140px,2fr) minmax(130px,1fr) minmax(115px,0.8fr);gap:8px;align-items:center;padding:9px 2px;border-bottom:1px solid var(--line);}
+  .syllabus-preview-row input[type=text],.syllabus-preview-row input[type=date],.syllabus-preview-row select{width:100%;min-width:0;padding:7px 8px;font-size:12px;}
+  .syllabus-preview-row input[type=checkbox]{width:16px;height:16px;}
+  .syllabus-row-meta{grid-column:2/-1;margin-top:-5px;}
+  .syllabus-duplicate{color:var(--amber);}
+  .syllabus-undo{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:1000;display:none;align-items:center;gap:12px;padding:8px 12px 8px 16px;border:1px solid var(--line);border-radius:9px;background:var(--panel);box-shadow:var(--shadow);font-size:13px;color:var(--text);white-space:nowrap;}
+  .syllabus-undo.show{display:flex;}
+  @media (max-width:600px){
+    .syllabus-fields{grid-template-columns:1fr;}
+    .syllabus-preview-row{grid-template-columns:auto minmax(0,1fr) minmax(105px,0.8fr);}
+    .syllabus-preview-row select{grid-column:2/-1;}
+    .syllabus-row-meta{grid-column:2/-1;}
+    .syllabus-undo{bottom:78px;max-width:calc(100vw - 24px);}
+  }
+  /* ===== SYLLABUS IMPORT CSS END ===== */
 </style>
 </head>
 <body>
@@ -409,6 +434,7 @@
             <div class="field"><span class="label">Deadline (optional)</span><input type="date" id="t_deadline"></div>
           </div>
           <div><button class="btn" id="addTaskBtn">Add task</button></div>
+          <div><button class="btn secondary" id="importSyllabusBtn">Import from syllabus</button></div>
         </div>
       </div>
       <div class="card" id="taskListCard"><div class="empty">No tasks yet — add your first one above.</div></div>
@@ -539,6 +565,31 @@
     </div>
   </div>
 </div>
+
+<div class="modal-bg" id="syllabusModal">
+  <div class="modal syllabus-modal" role="dialog" aria-modal="true" aria-labelledby="syllabusHeading">
+    <h3 id="syllabusHeading">Import from course syllabus / overview</h3>
+    <p>Review every task before anything is added.</p>
+    <div id="syllabusInputView">
+      <label class="label" for="syllabusText">Course syllabus or overview</label>
+      <textarea id="syllabusText" placeholder="Paste your course syllabus or overview here"></textarea>
+      <div class="field" style="margin-top:8px;"><span class="label">Or load a text file</span><input type="file" id="syllabusFile" accept=".txt,.md,.csv,text/plain,text/markdown,text/csv"></div>
+      <div class="syllabus-hint">For a PDF, open it, select all, copy and paste the text here.</div>
+      <div class="syllabus-fields">
+        <div class="field"><label class="label" for="syllabusCourse">Course name (optional)</label><input type="text" id="syllabusCourse" placeholder="e.g. Biology 101"></div>
+        <div class="field"><label class="label" for="syllabusStart">Start date</label><input type="date" id="syllabusStart"></div>
+      </div>
+      <div class="row"><button class="btn" id="syllabusCreateBtn">Create tasks</button><button class="btn secondary" id="syllabusCancelBtn">Cancel</button></div>
+    </div>
+    <div id="syllabusPreviewView" style="display:none;">
+      <div id="syllabusCount" class="note"></div>
+      <div class="syllabus-preview" id="syllabusPreviewList"></div>
+      <div class="row"><button class="btn" id="syllabusAddBtn">Add selected tasks</button><button class="btn secondary" id="syllabusBackBtn">Back</button></div>
+    </div>
+    <div class="syllabus-message" id="syllabusMessage" aria-live="polite"></div>
+  </div>
+</div>
+<div class="syllabus-undo" id="syllabusUndoToast"><span id="syllabusUndoText"></span><button class="btn secondary" id="syllabusUndoBtn">Undo import</button></div>
 
 <div class="toast" id="toast"></div>
 
@@ -1843,6 +1894,373 @@
     renderNow();
     setInterval(function(){ renderClock(); renderNow(); renderTimeline(); checkDueReminders(); }, 20000);
   }
+
+  // ===== SYLLABUS IMPORT START =====
+  var syllabusTasks = [];
+  var syllabusNotice = '';
+  var syllabusRunId = 0;
+  var syllabusUndo = null;
+  var syllabusUndoTimer = null;
+
+  function syllabusMessage(text, error){
+    try{
+      var el = $('syllabusMessage');
+      el.textContent = text || '';
+      el.classList.toggle('syllabus-warning', !!error);
+    }catch(e){ toast('Syllabus import could not continue.'); }
+  }
+  function syllabusDateIsValid(value){
+    try{
+      if(!DATE_RE.test(value||'')) return false;
+      var parts = value.split('-');
+      var d = new Date(+parts[0], +parts[1]-1, +parts[2]);
+      return d.getFullYear()===+parts[0] && d.getMonth()===+parts[1]-1 && d.getDate()===+parts[2];
+    }catch(e){ return false; }
+  }
+  function syllabusBoundText(value){
+    try{
+      var text = String(value||'');
+      return {text:text.slice(0,20000), truncated:text.length>20000};
+    }catch(e){ throw new Error('Could not read the syllabus text.'); }
+  }
+  function syllabusParseAI(reply){
+    try{
+      var text = String(reply||'').replace(/```(?:json)?/gi,'').trim();
+      var first = text.indexOf('['), last = text.lastIndexOf(']');
+      if(first<0 || last<first) throw new Error('The AI reply was not a task list.');
+      var parsed = JSON.parse(text.slice(first,last+1));
+      if(!Array.isArray(parsed)) throw new Error('The AI reply was not a task list.');
+      return parsed.map(function(item){
+        try{
+          if(!item || typeof item!=='object' || Array.isArray(item)) return null;
+          if(typeof item.title!=='string' || !item.title.trim()) return null;
+          if(['high','medium','low'].indexOf(item.priority)<0) return null;
+          if(item.deadline!==null && item.deadline!==undefined && !syllabusDateIsValid(item.deadline)) return null;
+          if(item.notes!==undefined && typeof item.notes!=='string') return null;
+          var title = item.title.trim();
+          var notes = (item.notes||'').trim();
+          if(notes) title += ' — '+notes;
+          return {title:title.slice(0,200), deadline:item.deadline||null, priority:item.priority, notes:notes.slice(0,500), selected:true};
+        }catch(e){ return null; }
+      }).filter(Boolean);
+    }catch(e){ throw new Error('The AI reply could not be read as a task list.'); }
+  }
+  function syllabusOfflineDate(line, startDate){
+    try{
+      var match = line.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
+      if(match){
+        var iso = match[1]+'-'+pad(+match[2])+'-'+pad(+match[3]);
+        if(syllabusDateIsValid(iso)) return iso;
+      }
+      match = line.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/);
+      if(match){
+        var a = +match[1], b = +match[2], year = +match[3];
+        var month = a>12 ? b : (b>12 ? a : b);
+        var day = a>12 ? a : (b>12 ? b : a);
+        iso = year+'-'+pad(month)+'-'+pad(day);
+        if(syllabusDateIsValid(iso)) return iso;
+      }
+      var monthNames = 'jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?';
+      var months = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+      var day, monthName, dateYear;
+      match = line.match(new RegExp('\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+('+monthNames+')(?:\\s*,?\\s*(\\d{4}))?\\b','i'));
+      if(match){ day=+match[1]; monthName=match[2]; dateYear=+(match[3]||startDate.slice(0,4)); }
+      else{
+        match = line.match(new RegExp('\\b('+monthNames+')\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:\\s*,?\\s*(\\d{4}))?\\b','i'));
+        if(match){ monthName=match[1]; day=+match[2]; dateYear=+(match[3]||startDate.slice(0,4)); }
+      }
+      if(match){
+        var monthKey = monthName.toLowerCase().slice(0,3);
+        iso = dateYear+'-'+pad(months[monthKey])+'-'+pad(day);
+        if(syllabusDateIsValid(iso)) return iso;
+      }
+      match = line.match(/\bweek\s+(\d+)\b/i);
+      if(match){
+        var week = +match[1], startParts = startDate.split('-');
+        if(week>=1 && week<=60 && syllabusDateIsValid(startDate)){
+          return dateISO(addDays(new Date(+startParts[0],+startParts[1]-1,+startParts[2]),(week-1)*7));
+        }
+      }
+      return null;
+    }catch(e){ return null; }
+  }
+  function syllabusParseOffline(text, startDate){
+    try{
+      var lines = String(text||'').split(/\r?\n/), tasks = [];
+      lines.forEach(function(line){
+        try{
+          var clean = line.replace(/^\s*(?:[-*•]|\d+[.)])\s*/,'').replace(/\*\*/g,'').trim();
+          if(!clean) return;
+          var hasMarker = /\b(?:week\s+\d+|unit\s+\d+|module\s+\d+|chapter\s+\d+|assignment|quiz|exam|project|lab)\b/i.test(clean);
+          var hasDate = /\b\d{4}-\d{1,2}-\d{1,2}\b|\b\d{1,2}\/\d{1,2}\/\d{4}\b|\b\d{1,2}(?:st|nd|rd|th)?\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b|\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}\b/i.test(clean);
+          if(!hasMarker && !hasDate) return;
+          var priority = /\b(?:exam|assignment|quiz|project|lab)\b/i.test(clean) ? 'high' : (/\breading\b/i.test(clean) ? 'low' : 'medium');
+          tasks.push({title:clean.slice(0,200), deadline:syllabusOfflineDate(clean,startDate), priority:priority, notes:'', selected:true});
+        }catch(e){}
+      });
+      return tasks;
+    }catch(e){ throw new Error('The basic parser could not read the syllabus.'); }
+  }
+  function syllabusIsDuplicate(task){
+    try{
+      var title = String(task.title||'').trim().toLowerCase();
+      return !!title && state.items.some(function(item){
+        return String(item.title||'').trim().toLowerCase()===title && (item.deadline||null)===(task.deadline||null);
+      });
+    }catch(e){ return false; }
+  }
+  function syllabusSelectedCount(){
+    try{ return syllabusTasks.filter(function(task){ return task.selected && task.title.trim(); }).length; }
+    catch(e){ return 0; }
+  }
+  function syllabusUpdateCount(){
+    try{
+      $('syllabusCount').textContent = syllabusSelectedCount()+' of '+syllabusTasks.length+' tasks selected.'+(syllabusNotice?' '+syllabusNotice:'');
+      $('syllabusAddBtn').disabled = syllabusSelectedCount()===0;
+    }catch(e){ syllabusMessage('Could not update the task preview.',true); }
+  }
+  function syllabusRenderPreview(){
+    try{
+      $('syllabusInputView').style.display='none';
+      $('syllabusPreviewView').style.display='';
+      $('syllabusPreviewList').innerHTML = syllabusTasks.map(function(task,index){
+        var duplicate = syllabusIsDuplicate(task);
+        if(duplicate) task.selected = false;
+        var past = task.deadline && task.deadline<todayISO();
+        return '<div class="syllabus-preview-row" data-syllabus-index="'+index+'">'+
+          '<input type="checkbox" class="syllabus-select" aria-label="Select task" '+(task.selected?'checked':'')+'>'+
+          '<input type="text" class="syllabus-title" maxlength="200" value="'+esc(task.title)+'" aria-label="Task title">'+
+          '<input type="date" class="syllabus-deadline" value="'+esc(task.deadline||'')+'" aria-label="Deadline">'+
+          '<select class="syllabus-priority" aria-label="Priority"><option value="low"'+(task.priority==='low'?' selected':'')+'>Low</option><option value="medium"'+(task.priority==='medium'?' selected':'')+'>Medium</option><option value="high"'+(task.priority==='high'?' selected':'')+'>High</option></select>'+
+          ((duplicate||past)?'<div class="syllabus-row-meta">'+(duplicate?'<span class="syllabus-warning syllabus-duplicate">Possible duplicate</span>':'')+(duplicate&&past?' · ':'')+(past?'<span class="syllabus-warning">Deadline is in the past</span>':'')+'</div>':'')+
+          '</div>';
+      }).join('');
+      $('syllabusPreviewList').querySelectorAll('.syllabus-preview-row').forEach(function(row){
+        try{
+          var task = syllabusTasks[+row.dataset.syllabusIndex];
+          var check = row.querySelector('.syllabus-select');
+          check.onchange = function(){
+            try{ task.selected=check.checked; syllabusUpdateCount(); }
+            catch(e){ syllabusMessage('Could not update the task selection.',true); }
+          };
+          row.querySelector('.syllabus-title').oninput = function(){
+            try{
+              task.title=this.value.slice(0,200);
+              var duplicate=syllabusIsDuplicate(task), past=task.deadline&&task.deadline<todayISO(), meta=row.querySelector('.syllabus-row-meta');
+              if(duplicate && task.selected){ task.selected=false; check.checked=false; }
+              if(duplicate||past){
+                if(!meta){ meta=document.createElement('div'); meta.className='syllabus-row-meta'; row.appendChild(meta); }
+                meta.innerHTML=(duplicate?'<span class="syllabus-warning syllabus-duplicate">Possible duplicate</span>':'')+(duplicate&&past?' · ':'')+(past?'<span class="syllabus-warning">Deadline is in the past</span>':'');
+              }else if(meta) meta.remove();
+              syllabusUpdateCount();
+            }catch(e){ syllabusMessage('Could not update the task title.',true); }
+          };
+          row.querySelector('.syllabus-deadline').onchange = function(){
+            try{
+              task.deadline=this.value||null;
+              syllabusRenderPreview();
+              syllabusUpdateCount();
+            }catch(e){ syllabusMessage('Could not update the task deadline.',true); }
+          };
+          row.querySelector('.syllabus-priority').onchange = function(){
+            try{ task.priority=this.value; }
+            catch(e){ syllabusMessage('Could not update task priority.',true); }
+          };
+        }catch(e){}
+      });
+      syllabusUpdateCount();
+    }catch(e){ syllabusMessage('Could not show the task preview.',true); }
+  }
+  async function syllabusStoredItemsContain(ids, shouldContain){
+    try{
+      var raw = await store.get('items');
+      if(!raw) return false;
+      var stored = JSON.parse(raw);
+      if(!Array.isArray(stored)) return false;
+      return ids.every(function(id){
+        var exists = stored.some(function(item){ return item && item.id===id; });
+        return shouldContain ? exists : !exists;
+      });
+    }catch(e){ return false; }
+  }
+  function syllabusClose(){
+    try{
+      syllabusRunId++;
+      $('syllabusModal').classList.remove('show');
+      $('syllabusInputView').style.display='';
+      $('syllabusPreviewView').style.display='none';
+      syllabusTasks=[];
+      syllabusNotice='';
+      syllabusMessage('');
+    }catch(e){ toast('Could not close the syllabus importer.'); }
+  }
+  function syllabusShowUndo(ids, snapshot){
+    try{
+      syllabusUndo={ids:ids.slice(), before:snapshot.slice()};
+      $('syllabusUndoText').textContent=ids.length+' task'+(ids.length===1?'':'s')+' added.';
+      $('syllabusUndoToast').classList.add('show');
+      clearTimeout(syllabusUndoTimer);
+      syllabusUndoTimer=setTimeout(function(){
+      try{
+        $('syllabusUndoToast').classList.remove('show');
+        syllabusUndo=null;
+      }catch(e){ toast('Undo notice could not be dismissed.'); }
+      },15000);
+    }catch(e){ toast('Tasks were added, but Undo is unavailable.'); }
+  }
+  function setupSyllabusImport(){
+    try{
+      $('importSyllabusBtn').onclick=function(){
+        try{
+          $('syllabusText').value='';
+          $('syllabusCourse').value='';
+          $('syllabusStart').value=todayISO();
+          $('syllabusFile').value='';
+          $('syllabusInputView').style.display='';
+          $('syllabusPreviewView').style.display='none';
+          syllabusTasks=[];
+          syllabusNotice='';
+          syllabusMessage('');
+          $('syllabusModal').classList.add('show');
+          $('syllabusText').focus();
+        }catch(e){ syllabusMessage('Could not open the syllabus importer.',true); }
+      };
+      $('syllabusCancelBtn').onclick=syllabusClose;
+      $('syllabusBackBtn').onclick=function(){
+        try{
+          $('syllabusPreviewView').style.display='none';
+          $('syllabusInputView').style.display='';
+          syllabusMessage('');
+        }catch(e){ syllabusMessage('Could not return to the syllabus input.',true); }
+      };
+      $('syllabusFile').onchange=function(){
+        try{
+          var file=this.files&&this.files[0];
+          this.value='';
+          if(!file) return;
+          if(!/\.(txt|md|csv)$/i.test(file.name||'')){ syllabusMessage('Choose a .txt, .md, or .csv text file.',true); return; }
+          var reader=new FileReader();
+          reader.onload=function(){
+            try{
+              var bounded=syllabusBoundText(reader.result);
+              $('syllabusText').value=bounded.text;
+              syllabusMessage(bounded.truncated?'File loaded; text was shortened to 20,000 characters.':'Text file loaded.');
+            }catch(e){ syllabusMessage('Could not read that file.',true); }
+          };
+          reader.onerror=function(){ try{ syllabusMessage('Could not read that file.',true); }catch(e){} };
+          reader.readAsText(file);
+        }catch(e){ syllabusMessage('Could not read that file.',true); }
+      };
+      $('syllabusCreateBtn').onclick=async function(){
+        var btn=$('syllabusCreateBtn'), run=++syllabusRunId;
+        btn.disabled=true;
+        try{
+          var input=$('syllabusText').value;
+          if(!input.trim()){ syllabusMessage('Paste or load some course text first.',true); return; }
+          var bounded=syllabusBoundText(input);
+          if(bounded.truncated) $('syllabusText').value=bounded.text;
+          var start=$('syllabusStart').value||todayISO();
+          if(!syllabusDateIsValid(start)){ syllabusMessage('Choose a valid start date.',true); return; }
+          var parsed=[], offline=!aiReady();
+          syllabusNotice=bounded.truncated?'Text shortened to 20,000 characters.':'';
+          if(!offline){
+            syllabusMessage('Creating a task list with '+providerLabel()+'…');
+            try{
+              var prompt='Extract course work from the text below. Respond with ONLY a JSON array, no markdown or explanation. Each item must have exactly this shape: {"title":"short clear title","deadline":"YYYY-MM-DD or null","priority":"high|medium|low","notes":"brief useful context or empty string"}. Create one task per assignment, exam, project, lab, reading block, or weekly topic. Resolve relative dates such as "Week 4" and "next Friday" from the supplied course start date ('+start+'). Do not invent dates that are not implied by the text. Exams and graded deliverables are high priority; weekly readings are low priority. Course name: '+($('syllabusCourse').value.trim()||'not provided')+'.\n\nCOURSE TEXT:\n'+bounded.text;
+              var timeout;
+              var reply;
+              try{
+                reply=await Promise.race([callAI(prompt),new Promise(function(resolve,reject){ timeout=setTimeout(function(){ reject(new Error('AI request timed out.')); },20000); })]);
+              }finally{ clearTimeout(timeout); }
+              parsed=syllabusParseAI(reply);
+              if(!parsed.length) throw new Error('The AI returned no usable tasks.');
+            }catch(e){ offline=true; }
+          }
+          if(offline){
+            parsed=syllabusParseOffline(bounded.text,start);
+            syllabusNotice+=(syllabusNotice?' ':'')+'Basic parser used; add an AI key in Settings for better results.';
+          }
+          if(run!==syllabusRunId) return;
+          if(parsed.length>100){
+            parsed=parsed.slice(0,100);
+            syllabusNotice+=(syllabusNotice?' ':'')+'Only the first 100 tasks are shown.';
+          }
+          if(!parsed.length){ syllabusMessage((offline?'Basic parser found no task-like lines. ':'No usable tasks were found.')+syllabusNotice,true); return; }
+          var course=$('syllabusCourse').value.trim();
+          syllabusTasks=parsed.map(function(task){
+            task.title=String(task.title||'').trim().slice(0,200);
+            task.deadline=syllabusDateIsValid(task.deadline)?task.deadline:null;
+            task.category=course.slice(0,80)||'Other';
+            task.selected=!syllabusIsDuplicate(task);
+            return task;
+          });
+          syllabusRenderPreview();
+          syllabusMessage('');
+        }catch(e){
+          if(run===syllabusRunId) syllabusMessage('Could not create tasks. Check the text and try again.',true);
+        }finally{
+          btn.disabled=false;
+        }
+      };
+      $('syllabusAddBtn').onclick=async function(){
+        try{
+          var selected=syllabusTasks.filter(function(task){ return task.selected && task.title.trim(); });
+          if(!selected.length){ syllabusMessage('Select at least one task with a title.',true); return; }
+          if(selected.length>100) selected=selected.slice(0,100);
+          var snapshot=state.items.slice();
+          var records=selected.map(function(task){
+            var estimate=30;
+            return {id:uid(),title:task.title.trim().slice(0,200),type:'project',category:task.category||'Other',
+              subject:'',estMinutes:estimate,remainingMinutes:estimate,
+              priority:task.priority==='high'?5:(task.priority==='low'?1:3),
+              deadline:syllabusDateIsValid(task.deadline)?task.deadline:null,status:'pending',createdAt:Date.now()};
+          });
+          state.items=state.items.concat(records);
+          await saveItems();
+          var ids=records.map(function(item){ return item.id; });
+          if(!await syllabusStoredItemsContain(ids,true)){
+            state.items=snapshot;
+            await saveItems();
+            syllabusMessage('Could not save tasks. Your task list was left unchanged.',true);
+            return;
+          }
+          syllabusClose();
+          refreshAll();
+          renderCalendar();
+          renderTimeline();
+          renderNow();
+          syllabusShowUndo(ids,snapshot);
+          toast(records.length+' task'+(records.length===1?'':'s')+' added.');
+        }catch(e){ syllabusMessage('Could not save tasks. Your task list was left unchanged.',true); }
+      };
+      $('syllabusUndoBtn').onclick=async function(){
+        try{
+          if(!syllabusUndo) return;
+          var ids=syllabusUndo.ids.slice(), beforeUndo=state.items.slice();
+          state.items=state.items.filter(function(item){ return ids.indexOf(item.id)<0; });
+          todaysPlan=todaysPlan.filter(function(block){ return ids.indexOf(block.itemId)<0; });
+          await saveItems();
+          if(!await syllabusStoredItemsContain(ids,false)){
+            state.items=beforeUndo;
+            await saveItems();
+            toast('Undo could not be saved. Your task list was left unchanged.');
+            return;
+          }
+          clearTimeout(syllabusUndoTimer);
+          syllabusUndo=null;
+          $('syllabusUndoToast').classList.remove('show');
+          refreshAll();
+          renderCalendar();
+          renderTimeline();
+          renderNow();
+          toast('Import undone.');
+        }catch(e){ toast('Could not undo the import.'); }
+      };
+    }catch(e){ toast('Syllabus import could not be initialized.'); }
+  }
+  setupSyllabusImport();
+  // ===== SYLLABUS IMPORT END =====
+
   init().catch(function(e){ var l = $('loading'); if(l){ l.style.display='flex'; l.textContent = 'Could not start: '+(e && e.message ? e.message : e); } });
 })();
 </script>

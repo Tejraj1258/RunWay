@@ -1872,7 +1872,7 @@
   var sync = {
     status:'off', detail:'', cfg:null, user:null, fb:null, db:null, auth:null, started:false,
     tombs:{items:{},timetable:{},events:{}}, last:{items:{},timetable:{},events:{}}, setHash:'',
-    unsubs:[], seen:{}, gotServer:{}, redrawT:null
+    unsubs:[], seen:{}, gotServer:{}, redrawT:null, connT:null
   };
 
   function effU(r){ return r.updatedAt || r.createdAt || 1; }
@@ -1906,7 +1906,13 @@
     if(tombChanged) persistTombs();
   }
 
-  function fbErr(e){ sync.detail = (e && (e.code || e.message)) ? String(e.code || e.message) : 'error'; setSyncStatus('error'); }
+  function fbErr(e){
+    var code = e && e.code ? String(e.code) : '';
+    sync.detail = code==='permission-denied' ? 'permission denied — publish the Firestore rules from the setup steps'
+                : code==='unavailable' ? 'cannot reach the database right now'
+                : (code || (e && e.message) || 'error');
+    setSyncStatus('error');
+  }
   function pushRec(c, rec, u){
     if(!syncLive()) return;
     var d = JSON.parse(JSON.stringify(rec)); d.updatedAt = u;
@@ -2021,9 +2027,9 @@
       var A = mods[0], Au = mods[1], F = mods[2];
       var app = A.initializeApp(sync.cfg);
       sync.auth = Au.getAuth(app);
-      try{ sync.db = F.initializeFirestore(app, {localCache: F.persistentLocalCache({tabManager: F.persistentMultipleTabManager()})}); }
-      catch(e){ sync.db = F.initializeFirestore(app, {}); }
-      sync.fb = {doc:F.doc, collection:F.collection, setDoc:F.setDoc, onSnapshot:F.onSnapshot, signInWithPopup:Au.signInWithPopup, GoogleAuthProvider:Au.GoogleAuthProvider, signOut:Au.signOut};
+      try{ sync.db = F.initializeFirestore(app, {localCache: F.persistentLocalCache({tabManager: F.persistentMultipleTabManager()}), experimentalAutoDetectLongPolling:true}); }
+      catch(e){ try{ sync.db = F.initializeFirestore(app, {experimentalAutoDetectLongPolling:true}); }catch(e2){ sync.db = F.getFirestore(app); } }
+      sync.fb = {getFirestore:F.getFirestore, doc:F.doc, collection:F.collection, setDoc:F.setDoc, onSnapshot:F.onSnapshot, signInWithPopup:Au.signInWithPopup, GoogleAuthProvider:Au.GoogleAuthProvider, signOut:Au.signOut};
       Au.onAuthStateChanged(sync.auth, function(u){
         stopListening();
         sync.user = u || null;
@@ -2044,12 +2050,20 @@
       sync.started = false; sync.detail = 'could not load Firebase'; setSyncStatus('error');
     }
   }
-  function stopListening(){ sync.unsubs.forEach(function(u){ try{ u(); }catch(e){} }); sync.unsubs = []; sync.seen = {}; sync.gotServer = {}; }
+  function stopListening(){ clearTimeout(sync.connT); sync.unsubs.forEach(function(u){ try{ u(); }catch(e){} }); sync.unsubs = []; sync.seen = {}; sync.gotServer = {}; }
   function startListening(){
     var uid = sync.user.uid;
+    clearTimeout(sync.connT);
+    sync.connT = setTimeout(function(){
+      if(sync.user && sync.status==='connecting'){
+        sync.detail = navigator.onLine===false ? 'no internet connection'
+          : 'cannot reach the database — in Firebase, check that Firestore Database is created and the rules are published, and that no ad-blocker is blocking it';
+        setSyncStatus('error');
+      }
+    }, 12000);
     COLLS.forEach(function(c){
       sync.seen[c] = {};
-      var unsub = sync.fb.onSnapshot(sync.fb.collection(sync.db,'users',uid,c), function(snap){
+      var unsub = sync.fb.onSnapshot(sync.fb.collection(sync.db,'users',uid,c), {includeMetadataChanges:true}, function(snap){
         var changed = false;
         snap.docChanges().forEach(function(ch){
           if(ch.type==='removed') return;
@@ -2063,11 +2077,11 @@
           Object.keys(sync.tombs[c]).forEach(function(id){ if(!sync.seen[c][id]) pushTomb(c, id, sync.tombs[c][id]); });
         }
         if(changed) afterRemote();
-        if(sync.gotServer.items && sync.gotServer.timetable && sync.gotServer.events){ sync.detail=''; setSyncStatus('online'); }
+        if(sync.gotServer.items && sync.gotServer.timetable && sync.gotServer.events){ clearTimeout(sync.connT); sync.detail=''; setSyncStatus('online'); }
       }, fbErr);
       sync.unsubs.push(unsub);
     });
-    sync.unsubs.push(sync.fb.onSnapshot(sync.fb.doc(sync.db,'users',uid,'meta','settings'), function(snap){
+    sync.unsubs.push(sync.fb.onSnapshot(sync.fb.doc(sync.db,'users',uid,'meta','settings'), {includeMetadataChanges:true}, function(snap){
       if(snap.exists()){ if(applyRemoteSettings(snap.data())) afterRemote(); }
       else if(!(snap.metadata && snap.metadata.fromCache) && (state.settings.updatedAt||0)>0) pushSettings();
     }, fbErr));

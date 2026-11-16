@@ -13,6 +13,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{
+    --ink:#000000;
     --ink-soft:#C7CBD1;
     --text:#ECEDEE;
     --paper:#000000;
@@ -27,6 +28,7 @@
     --rose-dim:rgba(208,105,110,0.16);
     --slate:#8B93A0;
     --line:#242629;
+    --line-soft:#1D1F22;
     --radius:10px;
     --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.45);
   }
@@ -154,9 +156,13 @@
 
   .empty{padding:30px 10px; text-align:center; color:var(--slate); font-size:13.5px; line-height:1.7;}
 
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
   .form-stack{display:flex; flex-direction:column; gap:12px; margin-top:12px;}
   .row{display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;}
   .field{display:flex; flex-direction:column; gap:5px; flex:1; min-width:120px;}
+  .radio-group{display:flex; gap:6px;}
+  .radio-opt{padding:8px 12px; border:1px solid var(--line); border-radius:7px; font-size:12.5px; background:var(--panel-2); color:var(--text);}
+  .radio-opt.sel{background:#fff; color:#0A0B0D; border-color:#fff;}
 
   .tt-day{margin-bottom:16px;}
   .tt-day h4{font-family:'Space Grotesk'; font-size:13px; margin:0 0 6px; text-transform:uppercase; letter-spacing:0.05em; color:var(--ink-soft);}
@@ -188,6 +194,7 @@
   .review-row .rtime{width:82px;}
   .review-row .rsubject{flex:1; min-width:100px;}
 
+  .event-date b{display:block; color:var(--text); font-size:12.5px;}
   .comingup-chip{background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:9px 13px; font-size:12px; white-space:nowrap; flex-shrink:0; color:var(--text);}
   .comingup-chip span{color:var(--slate); font-size:11px;}
   .preview-box{background:var(--teal-dim); border:1px solid #2B4A47; border-radius:9px; padding:14px; margin-top:12px;}
@@ -220,6 +227,9 @@
     #bottomnav .navitem{flex-direction:column; gap:3px; font-size:10.5px; padding:6px 8px; text-align:center;}
     #bottomnav .navitem .ico{font-size:17px;}
     .mobiletop{display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;}
+    .mobiletop .brand h1{color:var(--text);}
+    .mobiletop .brand .mark{}
+    .grid2{grid-template-columns:1fr;}
   }
   .mobiletop{display:none;}
   @media (max-width:760px){ .mobiletop{display:flex; align-items:baseline; gap:8px; margin-bottom:6px;} .mobiletop h1{font-family:'Space Grotesk'; font-size:15px; margin:0; letter-spacing:0.05em; color:var(--text);} .mobiletop .mark{width:8px;height:8px;background:var(--teal);display:inline-block;border-radius:2px;transform:rotate(45deg);} }
@@ -471,7 +481,7 @@
           <button class="btn secondary" id="syncSignOut" style="display:none;">Sign out</button>
           <span class="sub" id="syncStatus"></span>
         </div>
-        <details style="margin-top:12px;"><summary class="sub" style="cursor:pointer;">Technical details</summary><div class="row" style="margin:10px 0 4px; align-items:center;"><span class="sub">Connection mode</span><select id="syncMode"><option value="auto">Automatic (live, falls back to REST)</option><option value="stream">Live connection only</option><option value="poll">Live, long-polling</option><option value="rest">REST polling only</option></select><button class="btn secondary" id="syncModeApply">Apply &amp; reload</button><button class="btn secondary" id="syncCheck">Run connection check</button></div><pre id="syncLog" style="white-space:pre-wrap; font-family:'IBM Plex Mono'; font-size:11.5px; color:var(--slate); margin:8px 0 0;"></pre></details>
+        <details style="margin-top:12px;"><summary class="sub" style="cursor:pointer;">Technical details</summary><div class="row" style="margin:10px 0 4px; align-items:center;"><span class="sub">Connection mode</span><select id="syncMode"><option value="auto">Automatic (live, falls back to polling)</option><option value="stream">Live connection only</option><option value="poll">Live, long-polling</option><option value="rest">Polling only (most reliable)</option></select><button class="btn secondary" id="syncModeApply">Apply &amp; reload</button><button class="btn secondary" id="syncCheck">Run connection check</button></div><pre id="syncLog" style="white-space:pre-wrap; font-family:'IBM Plex Mono'; font-size:11.5px; color:var(--slate); margin:8px 0 0;"></pre></details>
         <div id="fbCfgBox" style="margin-top:14px;">
           <span class="label">Firebase setup (one time per device)</span>
           <p class="note">Paste the <b>firebaseConfig</b> block from your Firebase project (Project settings → Your apps).</p>
@@ -1854,7 +1864,7 @@
     appId: "1:1026534547006:web:ed8c3595517f952ac6fb6f"
   };
   var FB_VERSION = '13.2.0';
-  var FIREBASE_DB_ID = '(default)';
+  var FIREBASE_DB_ID = 'default';      // the Firestore database ID shown in the Firebase console (a normal default database would be '(default)')
   var COLLS = ['items','timetable','events'];
   var COLL = {
     items:     {get:function(){ return state.items; },     set:function(a){ state.items=a; },     norm:normItem},
@@ -1864,8 +1874,7 @@
   var sync = {
     status:'off', detail:'', cfg:null, user:null, fb:null, db:null, auth:null, started:false,
     tombs:{items:{},timetable:{},events:{}}, last:{items:{},timetable:{},events:{}}, setHash:'',
-    unsubs:[], seen:{}, gotServer:{}, redrawT:null, connT:null, log:[], mode:'auto',
-    restActive:false, restTimer:null, restLast:{}, restInitial:{}, restBusy:false
+    unsubs:[], seen:{}, gotServer:{}, redrawT:null, connT:null, log:[], mode:'auto', transport:'stream', pollGen:0, polled:{}, lastU:{}, wake:null, pollOk:false
   };
 
   function effU(r){ return r.updatedAt || r.createdAt || 1; }
@@ -1876,7 +1885,7 @@
     sync.setHash = setHashOf();
   }
   function persistTombs(){ try{ store.set('tombs', JSON.stringify(sync.tombs)); }catch(e){} }
-  function syncLive(){ return !!(sync.user && (sync.restActive || (sync.fb && sync.db))); }
+  function syncLive(){ return !!(sync.user && (sync.transport==='rest' || (sync.fb && sync.db))); }
 
   // Called before every local save: stamps changed records, records deletions, and uploads them if signed in.
   function syncStamp(k){
@@ -1910,35 +1919,115 @@
     var code = e && e.code ? String(e.code) : '';
     sync.detail = code==='permission-denied' ? 'permission denied — publish the Firestore rules from the setup steps'
                 : code==='unavailable' ? 'cannot reach the database right now'
-                : code==='rest/404' ? 'Firestore REST says this database was not found — verify the Firebase project ID and database ID'
                 : (code || (e && e.message) || 'error');
     setSyncStatus('error');
+  }
+  function sendDoc(path, data){
+    if(sync.transport==='rest') return restWrite(path, data).catch(fbErr);
+    return sync.fb.setDoc(sync.fb.doc.apply(null, [sync.db].concat(path)), data).catch(fbErr);
   }
   function pushRec(c, rec, u){
     if(!syncLive()) return;
     var d = JSON.parse(JSON.stringify(rec)); d.updatedAt = u;
-    if(sync.restActive){
-      restWrite('users/'+encodeURIComponent(sync.user.uid)+'/'+c+'/'+encodeURIComponent(rec.id), {d:d,u:u,x:false}, c, rec.id).catch(fbErr);
-      return;
-    }
-    sync.fb.setDoc(sync.fb.doc(sync.db,'users',sync.user.uid,c,rec.id), {d:d, u:u, x:false}).catch(fbErr);
+    sendDoc(['users',sync.user.uid,c,rec.id], {d:d, u:u, x:false});
   }
   function pushTomb(c, id, u){
     if(!syncLive()) return;
-    if(sync.restActive){
-      restWrite('users/'+encodeURIComponent(sync.user.uid)+'/'+c+'/'+encodeURIComponent(id), {d:null,u:u,x:true}, c, id).catch(fbErr);
-      return;
-    }
-    sync.fb.setDoc(sync.fb.doc(sync.db,'users',sync.user.uid,c,id), {d:null, u:u, x:true}).catch(fbErr);
+    sendDoc(['users',sync.user.uid,c,id], {d:null, u:u, x:true});
   }
   function pushSettings(){
     if(!syncLive()) return;
     var st = state.settings;
-    if(sync.restActive){
-      restWrite('users/'+encodeURIComponent(sync.user.uid)+'/meta/settings', {d:{dayStart:st.dayStart, dayEnd:st.dayEnd, maxFocusHours:st.maxFocusHours},u:st.updatedAt||0,x:false}, 'settings', 'settings').catch(fbErr);
-      return;
+    sendDoc(['users',sync.user.uid,'meta','settings'], {d:{dayStart:st.dayStart, dayEnd:st.dayEnd, maxFocusHours:st.maxFocusHours}, u:st.updatedAt||0, x:false});
+  }
+
+  // ---- REST transport (plain HTTPS requests; used when the live connection cannot be established) ----
+  function jsToFs(v){
+    if(v===null || v===undefined) return {nullValue:null};
+    if(typeof v==='boolean') return {booleanValue:v};
+    if(typeof v==='number') return Number.isInteger(v) ? {integerValue:String(v)} : {doubleValue:v};
+    if(typeof v==='string') return {stringValue:v};
+    if(Array.isArray(v)) return {arrayValue:{values:v.map(jsToFs)}};
+    var f = {}; Object.keys(v).forEach(function(k){ f[k] = jsToFs(v[k]); }); return {mapValue:{fields:f}};
+  }
+  function fsToJs(v){
+    if(!v) return null;
+    if('stringValue' in v) return v.stringValue;
+    if('integerValue' in v) return Number(v.integerValue);
+    if('doubleValue' in v) return Number(v.doubleValue);
+    if('booleanValue' in v) return !!v.booleanValue;
+    if('mapValue' in v){ var o = {}, f = v.mapValue.fields || {}; Object.keys(f).forEach(function(k){ o[k] = fsToJs(f[k]); }); return o; }
+    if('arrayValue' in v) return (v.arrayValue.values || []).map(fsToJs);
+    return null;
+  }
+  async function restFetch(method, path, body){
+    var tok = await sync.user.getIdToken();
+    var url = 'https://firestore.googleapis.com/v1/projects/'+encodeURIComponent(sync.cfg.projectId)+'/databases/'+encodeURIComponent(FIREBASE_DB_ID)+'/documents'+path;
+    var res = await fetch(url, {method:method, headers:{'Authorization':'Bearer '+tok, 'Content-Type':'application/json'}, body: body ? JSON.stringify(body) : undefined});
+    var txt = await res.text(), js = null; try{ js = txt ? JSON.parse(txt) : null; }catch(e){}
+    if(!res.ok){
+      var er = new Error((js && js.error && js.error.message) ? js.error.message : 'HTTP '+res.status);
+      er.code = res.status===403 ? 'permission-denied' : res.status===404 ? 'not-found' : 'http-'+res.status;
+      throw er;
     }
-    sync.fb.setDoc(sync.fb.doc(sync.db,'users',sync.user.uid,'meta','settings'), {d:{dayStart:st.dayStart, dayEnd:st.dayEnd, maxFocusHours:st.maxFocusHours}, u:st.updatedAt||0, x:false}).catch(fbErr);
+    return js;
+  }
+  function restWrite(path, data){
+    var f = jsToFs(data).mapValue.fields;
+    return restFetch('PATCH', '/'+path.map(encodeURIComponent).join('/'), {fields:f});
+  }
+  async function pollOnce(){
+    var uid = sync.user.uid, changed = false;
+    var cols = COLLS.concat(['meta']);
+    for(var i=0;i<cols.length;i++){
+      var c = cols[i];
+      var since = Math.max(0, (sync.lastU[c]||0) - 300000);      // 5-minute overlap tolerates small clock differences between devices
+      var rows = await restFetch('POST', '/users/'+encodeURIComponent(uid)+':runQuery', {structuredQuery:{from:[{collectionId:c}], where:{fieldFilter:{field:{fieldPath:'u'}, op:'GREATER_THAN', value:{integerValue:String(since)}}}}});
+      var first = !sync.polled[c], seen = {};
+      (rows || []).forEach(function(row){
+        if(!row.document) return;
+        var id = row.document.name.split('/').pop();
+        var r = fsToJs({mapValue:{fields:row.document.fields || {}}});
+        if(!r || typeof r.u!=='number') return;
+        seen[id] = 1; sync.lastU[c] = Math.max(sync.lastU[c]||0, r.u);
+        if(c==='meta'){ if(id==='settings' && applyRemoteSettings(r)) changed = true; }
+        else if(applyRemote(c, id, r)) changed = true;
+      });
+      if(first){
+        sync.polled[c] = true;
+        if(c==='meta'){ if(!seen.settings && (state.settings.updatedAt||0)>0) pushSettings(); }
+        else {
+          COLL[c].get().forEach(function(r){ if(!seen[r.id]) pushRec(c, r, effU(r)); });
+          Object.keys(sync.tombs[c]).forEach(function(id){ if(!seen[id]) pushTomb(c, id, sync.tombs[c][id]); });
+        }
+      }
+    }
+    if(changed) afterRemote();
+  }
+  function pollMs(){ var n = 15000; try{ var v = +localStorage.getItem('runway:pollms'); if(v>=300) n = v; }catch(e){} return n; }
+  function sleepWake(ms){ return new Promise(function(res){ var t = setTimeout(done, ms); function done(){ clearTimeout(t); sync.wake = null; res(); } sync.wake = done; }); }
+  function startPolling(){
+    sync.transport = 'rest'; sync.polled = {}; sync.lastU = {}; sync.pollOk = false;
+    var gen = ++sync.pollGen;
+    slog('using polling (checks every '+Math.round(pollMs()/1000)+'s while this tab is visible)');
+    (async function loop(){
+      while(sync.user && sync.transport==='rest' && gen===sync.pollGen){
+        if(document.visibilityState!=='hidden' || !sync.pollOk){
+          try{ await pollOnce(); if(!sync.pollOk) slog('poll: OK'); sync.pollOk = true; sync.detail = ''; setSyncStatus('online'); }
+          catch(e){ fbErr(e); }
+        }
+        await sleepWake(pollMs());
+      }
+    })();
+  }
+  document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible' && sync.wake) sync.wake(); });
+  window.addEventListener('focus', function(){ if(sync.wake) sync.wake(); });
+  async function connectionCheck(){
+    if(!sync.user){ slog('check: sign in first'); return; }
+    slog('check: asking the database over plain HTTPS…');
+    var t0 = Date.now();
+    try{ await restFetch('GET', '/users/'+encodeURIComponent(sync.user.uid)+'/items?pageSize=1'); slog('check: OK — database reachable, rules allow you ('+(Date.now()-t0)+' ms)'); }
+    catch(e){ slog('check: FAILED — '+(e.code||'')+' '+(e.message||'')+' ('+(Date.now()-t0)+' ms)'); }
   }
 
   // Merge one remote document into local state. Returns true if local data changed.
@@ -2001,7 +2090,7 @@
       signedout:'Not signed in — saved in this browser only.', connecting:'Connecting…', online:'Synced', offline:'Offline — changes upload when you are back online.',
       error:'Sync problem'
     }[sync.status] || '';
-    if(sync.status==='online' && sync.user) label = 'Synced as '+(sync.user.email||'your account')+(sync.restActive ? ' (REST polling every 15 s)' : '');
+    if(sync.status==='online' && sync.user) label = 'Synced as '+(sync.user.email||'your account')+(sync.transport==='rest' ? ' (polling every '+Math.round(pollMs()/1000)+' s)' : '');
     if(sync.status==='error' && sync.detail) label += ' ('+sync.detail+')';
     if(sync.status==='online' && typeof navigator!=='undefined' && navigator.onLine===false) label = 'Offline — changes upload when you are back online.';
     var f = $('sidebarFoot');
@@ -2028,174 +2117,6 @@
     try{ var raw = localStorage.getItem('runway:fbconfig'); return raw ? JSON.parse(raw) : null; }catch(e){ return null; }
   }
 
-  function restRoot(){
-    return 'https://firestore.googleapis.com/v1/projects/'+encodeURIComponent(sync.cfg.projectId)+'/databases/'+encodeURIComponent(FIREBASE_DB_ID)+'/documents';
-  }
-  function restEncode(v){
-    if(v===null) return {nullValue:null};
-    if(typeof v==='boolean') return {booleanValue:v};
-    if(typeof v==='number') return Number.isInteger(v) ? {integerValue:String(v)} : {doubleValue:v};
-    if(typeof v==='string') return {stringValue:v};
-    if(Array.isArray(v)) return {arrayValue:{values:v.map(restEncode)}};
-    if(v && typeof v==='object'){
-      var fields={};
-      Object.keys(v).forEach(function(k){ if(typeof v[k]!=='undefined') fields[k]=restEncode(v[k]); });
-      return {mapValue:{fields:fields}};
-    }
-    return {nullValue:null};
-  }
-  function restDecode(v){
-    if(!v || typeof v!=='object') return null;
-    if(Object.prototype.hasOwnProperty.call(v,'nullValue')) return null;
-    if(Object.prototype.hasOwnProperty.call(v,'stringValue')) return v.stringValue;
-    if(Object.prototype.hasOwnProperty.call(v,'booleanValue')) return v.booleanValue;
-    if(Object.prototype.hasOwnProperty.call(v,'integerValue')) return Number(v.integerValue);
-    if(Object.prototype.hasOwnProperty.call(v,'doubleValue')) return Number(v.doubleValue);
-    if(Object.prototype.hasOwnProperty.call(v,'mapValue')){
-      var out={}; var fields=(v.mapValue && v.mapValue.fields)||{};
-      Object.keys(fields).forEach(function(k){ out[k]=restDecode(fields[k]); });
-      return out;
-    }
-    if(Object.prototype.hasOwnProperty.call(v,'arrayValue')){
-      return ((v.arrayValue && v.arrayValue.values)||[]).map(restDecode);
-    }
-    if(Object.prototype.hasOwnProperty.call(v,'timestampValue')) return v.timestampValue;
-    return null;
-  }
-  async function restFetch(url, options, user, label){
-    var token=await user.getIdToken();
-    var headers=options && options.headers ? options.headers : {};
-    headers.Authorization='Bearer '+token;
-    var response=await fetch(url, Object.assign({}, options||{}, {headers:headers}));
-    if(!response.ok){
-      var text=await response.text(), body=null;
-      try{ body=JSON.parse(text); }catch(e){}
-      var message=body && body.error && body.error.message ? body.error.message : (text || response.statusText);
-      var error=new Error('Firestore REST '+response.status+(label ? ' ('+label+')' : '')+': '+message);
-      error.code='rest/'+response.status;
-      error.status=response.status;
-      throw error;
-    }
-    return response.status===204 ? null : response.json();
-  }
-  function restApply(data, id, collection){
-    if(collection==='settings'){
-      if(applyRemoteSettings(data)) afterRemote();
-    }else if(applyRemote(collection, id, data)){
-      afterRemote();
-    }
-  }
-  async function restWrite(path, data, collection, id){
-    var user=sync.user;
-    for(var attempt=0;attempt<3;attempt++){
-      var url=restRoot()+'/'+path;
-      var current=null;
-      try{
-        current=await restFetch(url, {method:'GET'}, user, 'GET document');
-      }catch(e){
-        if(e.status!==404) throw e;
-      }
-      if(sync.user!==user || !sync.restActive) return;
-      var updateTime=current && current.updateTime;
-      var remote=current && current.fields ? restDecode({mapValue:{fields:current.fields}}) : null;
-      if(remote && typeof remote.u==='number' && remote.u>=data.u){
-        restApply(remote, id, collection);
-        return;
-      }
-      var patchUrl=new URL(url);
-      patchUrl.searchParams.append('updateMask.fieldPaths','d');
-      patchUrl.searchParams.append('updateMask.fieldPaths','u');
-      patchUrl.searchParams.append('updateMask.fieldPaths','x');
-      var body={fields:{d:restEncode(data.d),u:{integerValue:String(data.u)},x:{booleanValue:data.x}}};
-      if(updateTime) patchUrl.searchParams.set('currentDocument.updateTime', updateTime);
-      else patchUrl.searchParams.set('currentDocument.exists','false');
-      try{
-        await restFetch(patchUrl.toString(), {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}, user, 'PATCH document');
-        return;
-      }catch(e){
-        if((e.status===400 || e.status===409) && attempt<2) continue;
-        throw e;
-      }
-    }
-    throw new Error('Firestore REST write conflicted repeatedly; the next poll will retry.');
-  }
-  async function restPollCollection(collection, lastSeen, user){
-    var parent='users/'+encodeURIComponent(user.uid);
-    var url=restRoot()+'/'+parent+':runQuery';
-    var since=Math.max(0,lastSeen-300000);
-    var body={structuredQuery:{
-      from:[{collectionId:collection}],
-      where:{fieldFilter:{field:{fieldPath:'u'},op:'GREATER_THAN',value:{integerValue:String(since)}}}
-    }};
-    var rows=await restFetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},user,'runQuery '+collection);
-    if(sync.user!==user || !sync.restActive) return;
-    var max=lastSeen, changed=false, seen={};
-    (rows||[]).forEach(function(row){
-      if(!row || !row.document) return;
-      var doc=row.document, fields=restDecode({mapValue:{fields:doc.fields||{}}});
-      if(!fields || typeof fields.u!=='number') return;
-      var id=decodeURIComponent(doc.name.slice(doc.name.lastIndexOf('/')+1));
-      seen[id]=1;
-      if(fields.u>max) max=fields.u;
-      if(collection==='meta'){
-        if(id==='settings' && applyRemoteSettings(fields)) changed=true;
-      }else if(applyRemote(collection,id,fields)) changed=true;
-    });
-    sync.restLast[collection]=max;
-    if(changed) afterRemote();
-    if(sync.restInitial[collection]){
-      sync.restInitial[collection]=false;
-      if(collection==='meta'){
-        if(!seen.settings && (state.settings.updatedAt||0)>0) pushSettings();
-      }else{
-        COLL[collection].get().forEach(function(r){ if(!seen[r.id]) pushRec(collection,r,effU(r)); });
-        Object.keys(sync.tombs[collection]).forEach(function(id){ if(!seen[id]) pushTomb(collection,id,sync.tombs[collection][id]); });
-      }
-    }
-    slog(collection+': REST poll, documents='+Object.keys(seen).length+', lastSeen='+max);
-  }
-  async function pollRest(){
-    if(!sync.restActive || sync.restBusy || !sync.user) return;
-    sync.restBusy=true;
-    var user=sync.user;
-    try{
-      await Promise.all(COLLS.concat(['meta']).map(function(c){
-        return restPollCollection(c,sync.restLast[c]||0,user);
-      }));
-      if(sync.user===user && sync.restActive){
-        clearTimeout(sync.connT); sync.detail=''; setSyncStatus('online');
-      }
-    }catch(e){
-      if(sync.user===user && sync.restActive) fbErr(e);
-    }finally{
-      sync.restBusy=false;
-    }
-  }
-  function startRestPolling(){
-    if(sync.restActive || !sync.user) return;
-    clearTimeout(sync.connT);
-    sync.unsubs.forEach(function(u){ try{ u(); }catch(e){} });
-    sync.unsubs=[];
-    sync.restActive=true;
-    setSyncStatus('connecting');
-    sync.restLast={items:0,timetable:0,events:0,meta:0};
-    sync.restInitial={items:true,timetable:true,events:true,meta:true};
-    slog('live stream unavailable; starting authenticated REST polling every 15s');
-    pollRest();
-    sync.restTimer=setInterval(pollRest,15000);
-  }
-  async function connectionCheck(){
-    if(!sync.user){ slog('check: sign in first'); return; }
-    slog('check: requesting the signed-in user collection over HTTPS');
-    var started=Date.now();
-    try{
-      await restFetch(restRoot()+'/users/'+encodeURIComponent(sync.user.uid)+'/items?pageSize=1',{method:'GET'},sync.user,'connection check');
-      slog('check: OK — authenticated database request succeeded ('+(Date.now()-started)+' ms)');
-    }catch(e){
-      slog('check: FAILED '+(e && e.code ? e.code+' ' : '')+(e && e.message ? String(e.message).slice(0,200) : 'unknown error')+' ('+(Date.now()-started)+' ms)');
-    }
-  }
-
   async function startSync(){
     if(store.mode!=='local' || sync.started) return;
     sync.cfg = getSyncConfig();
@@ -2203,26 +2124,25 @@
     if(location.protocol!=='http:' && location.protocol!=='https:'){ setSyncStatus('needhost'); return; }
     sync.started = true; setSyncStatus('connecting');
     try{
-      var mode='auto'; try{ mode=localStorage.getItem('runway:syncmode')||'auto'; }catch(e){}
+      var mode0 = 'auto'; try{ mode0 = localStorage.getItem('runway:syncmode') || 'auto'; }catch(e){}
+      ['warn','error'].forEach(function(k){ var orig = console[k]; console[k] = function(){ try{ var m = Array.prototype.slice.call(arguments).map(String).join(' '); if(/firestore|firebase/i.test(m)) slog('console.'+k+': '+m.slice(0,240)); }catch(e){} return orig.apply(console, arguments); }; });
       var base = 'https://www.gstatic.com/firebasejs/'+FB_VERSION+'/';
-      var mods = await Promise.all([import(base+'firebase-app.js'), import(base+'firebase-auth.js'), mode==='rest' ? Promise.resolve(null) : import(base+'firebase-firestore.js')]);
+      var mods = await Promise.all([import(base+'firebase-app.js'), import(base+'firebase-auth.js'), mode0==='rest' ? Promise.resolve(null) : import(base+'firebase-firestore.js')]);
       var A = mods[0], Au = mods[1], F = mods[2];
-      if(F) F.setLogLevel('debug');
       var app = A.initializeApp(sync.cfg);
       sync.auth = Au.getAuth(app);
       if(F){
-        // In-memory cache (no multi-window leader election): the app's sync layer keeps its own local copy.
+        // In-memory cache (no multi-window leader election): my own sync layer already keeps the local copy and re-uploads offline edits.
+        var mode = 'auto'; try{ mode = localStorage.getItem('runway:syncmode') || 'auto'; }catch(e){}
         var fsSet = {};
         if(F.memoryLocalCache){ try{ fsSet.localCache = F.memoryLocalCache(); }catch(e){} }
         if(mode==='poll') fsSet.experimentalForceLongPolling = true;
         else if(mode==='auto') fsSet.experimentalAutoDetectLongPolling = true;
         try{ sync.db = F.initializeFirestore(app, fsSet, FIREBASE_DB_ID); }
-        catch(e){ slog('initializeFirestore failed: '+(e && e.message ? e.message : e)); try{ sync.db = F.getFirestore(app, FIREBASE_DB_ID); }catch(e2){ throw e2; } }
-        slog('connection mode: '+mode+' (memory cache), database: '+FIREBASE_DB_ID);
-      }else{
-        slog('connection mode: REST polling only');
+        catch(e){ try{ sync.db = F.getFirestore(app, FIREBASE_DB_ID); }catch(e2){ throw e2; } }
+        sync.mode = mode; slog('connection mode: '+mode+' (memory cache), database: '+FIREBASE_DB_ID);
       }
-      sync.mode=F ? mode : 'rest';
+      else { sync.mode = 'rest'; slog('connection mode: polling only'); }
       sync.fb = {getFirestore:F&&F.getFirestore, doc:F&&F.doc, collection:F&&F.collection, setDoc:F&&F.setDoc, onSnapshot:F&&F.onSnapshot, signInWithPopup:Au.signInWithPopup, GoogleAuthProvider:Au.GoogleAuthProvider, signOut:Au.signOut};
       Au.onAuthStateChanged(sync.auth, function(u){
         slog('auth: '+(u ? 'signed in' : 'signed out'));
@@ -2238,33 +2158,28 @@
           }
         }
         try{ localStorage.setItem('runway:syncuid', u.uid); }catch(e){}
-        setSyncStatus('connecting');
-        if(sync.mode==='rest') startRestPolling(); else startListening();
+        setSyncStatus('connecting'); if(sync.mode==='rest') startPolling(); else { sync.transport = 'stream'; startListening(); }
       });
       setSyncStatus('signedout');
     }catch(e){
       sync.started = false; sync.detail = 'could not load Firebase'; slog('load error: '+(e && e.message ? e.message : e)); setSyncStatus('error');
     }
   }
-  function stopListening(){
-    clearTimeout(sync.connT); clearInterval(sync.restTimer); sync.restTimer=null; sync.restActive=false; sync.restBusy=false;
-    sync.unsubs.forEach(function(u){ try{ u(); }catch(e){} });
-    sync.unsubs=[]; sync.seen={}; sync.gotServer={};
-  }
+  function stopListening(){ sync.pollGen++; if(sync.wake) sync.wake(); clearTimeout(sync.connT); sync.unsubs.forEach(function(u){ try{ u(); }catch(e){} }); sync.unsubs = []; sync.seen = {}; sync.gotServer = {}; }
   function startListening(){
     var uid = sync.user.uid;
     clearTimeout(sync.connT);
     slog('listening started');
     sync.connT = setTimeout(function(){
+      if(sync.user && sync.status==='connecting' && sync.transport==='stream' && sync.mode!=='stream'){
+        slog('live connection did not establish after 12s — switching to polling');
+        stopListening(); startPolling(); return;
+      }
       if(sync.user && sync.status==='connecting'){
-        if(sync.mode!=='stream'){
-          slog('live stream unavailable; switching to REST polling');
-          startRestPolling();
-        }else{
-          slog('gave up waiting after 12s');
-          sync.detail = navigator.onLine===false ? 'no internet connection' : 'live stream timed out';
-          setSyncStatus('error');
-        }
+        slog('gave up waiting after 12s');
+        sync.detail = navigator.onLine===false ? 'no internet connection'
+          : 'cannot reach the database — in Firebase, check that Firestore Database is created and the rules are published, and that no ad-blocker is blocking it';
+        setSyncStatus('error');
       }
     }, 12000);
     COLLS.forEach(function(c){
@@ -2285,14 +2200,14 @@
         }
         if(changed) afterRemote();
         if(sync.gotServer.items && sync.gotServer.timetable && sync.gotServer.events){ clearTimeout(sync.connT); sync.detail=''; setSyncStatus('online'); }
-      }, function(e){ fbErr(e); if(sync.mode!=='stream') startRestPolling(); });
+      }, fbErr);
       sync.unsubs.push(unsub);
     });
     sync.unsubs.push(sync.fb.onSnapshot(sync.fb.doc(sync.db,'users',uid,'meta','settings'), {includeMetadataChanges:true}, function(snap){
       slog('settings: snapshot, exists='+snap.exists()+', fromCache='+(snap.metadata ? snap.metadata.fromCache : '?'));
       if(snap.exists()){ if(applyRemoteSettings(snap.data())) afterRemote(); }
       else if(!(snap.metadata && snap.metadata.fromCache) && (state.settings.updatedAt||0)>0) pushSettings();
-    }, function(e){ fbErr(e); if(sync.mode!=='stream') startRestPolling(); }));
+    }, fbErr));
   }
   async function syncSignIn(){
     if(!sync.fb){ await startSync(); }

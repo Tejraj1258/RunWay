@@ -481,6 +481,7 @@
           <button class="btn secondary" id="syncSignOut" style="display:none;">Sign out</button>
           <span class="sub" id="syncStatus"></span>
         </div>
+        <details style="margin-top:12px;"><summary class="sub" style="cursor:pointer;">Technical details</summary><pre id="syncLog" style="white-space:pre-wrap; font-family:'IBM Plex Mono'; font-size:11.5px; color:var(--slate); margin:8px 0 0;"></pre></details>
         <div id="fbCfgBox" style="margin-top:14px;">
           <span class="label">Firebase setup (one time per device)</span>
           <p class="note">Paste the <b>firebaseConfig</b> block from your Firebase project (Project settings → Your apps).</p>
@@ -1872,7 +1873,7 @@
   var sync = {
     status:'off', detail:'', cfg:null, user:null, fb:null, db:null, auth:null, started:false,
     tombs:{items:{},timetable:{},events:{}}, last:{items:{},timetable:{},events:{}}, setHash:'',
-    unsubs:[], seen:{}, gotServer:{}, redrawT:null, connT:null
+    unsubs:[], seen:{}, gotServer:{}, redrawT:null, connT:null, log:[]
   };
 
   function effU(r){ return r.updatedAt || r.createdAt || 1; }
@@ -1906,7 +1907,14 @@
     if(tombChanged) persistTombs();
   }
 
+  function slog(msg){
+    var d = new Date();
+    sync.log.push(pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds())+'  '+msg);
+    if(sync.log.length>25) sync.log.shift();
+    var el = $('syncLog'); if(el) el.textContent = sync.log.join('\n');
+  }
   function fbErr(e){
+    slog('ERROR '+(e && e.code ? e.code : '')+' '+(e && e.message ? String(e.message).slice(0,200) : ''));
     var code = e && e.code ? String(e.code) : '';
     sync.detail = code==='permission-denied' ? 'permission denied — publish the Firestore rules from the setup steps'
                 : code==='unavailable' ? 'cannot reach the database right now'
@@ -2027,10 +2035,11 @@
       var A = mods[0], Au = mods[1], F = mods[2];
       var app = A.initializeApp(sync.cfg);
       sync.auth = Au.getAuth(app);
-      try{ sync.db = F.initializeFirestore(app, {localCache: F.persistentLocalCache({tabManager: F.persistentMultipleTabManager()}), experimentalAutoDetectLongPolling:true}); }
-      catch(e){ try{ sync.db = F.initializeFirestore(app, {experimentalAutoDetectLongPolling:true}); }catch(e2){ sync.db = F.getFirestore(app); } }
+      try{ sync.db = F.initializeFirestore(app, {localCache: F.persistentLocalCache({tabManager: F.persistentMultipleTabManager()}), experimentalForceLongPolling:true}); }
+      catch(e){ try{ sync.db = F.initializeFirestore(app, {experimentalForceLongPolling:true}); }catch(e2){ sync.db = F.getFirestore(app); } }
       sync.fb = {getFirestore:F.getFirestore, doc:F.doc, collection:F.collection, setDoc:F.setDoc, onSnapshot:F.onSnapshot, signInWithPopup:Au.signInWithPopup, GoogleAuthProvider:Au.GoogleAuthProvider, signOut:Au.signOut};
       Au.onAuthStateChanged(sync.auth, function(u){
+        slog('auth: '+(u ? 'signed in' : 'signed out'));
         stopListening();
         sync.user = u || null;
         if(!u){ setSyncStatus('signedout'); return; }
@@ -2047,15 +2056,17 @@
       });
       setSyncStatus('signedout');
     }catch(e){
-      sync.started = false; sync.detail = 'could not load Firebase'; setSyncStatus('error');
+      sync.started = false; sync.detail = 'could not load Firebase'; slog('load error: '+(e && e.message ? e.message : e)); setSyncStatus('error');
     }
   }
   function stopListening(){ clearTimeout(sync.connT); sync.unsubs.forEach(function(u){ try{ u(); }catch(e){} }); sync.unsubs = []; sync.seen = {}; sync.gotServer = {}; }
   function startListening(){
     var uid = sync.user.uid;
     clearTimeout(sync.connT);
+    slog('listening started (long-polling mode)');
     sync.connT = setTimeout(function(){
       if(sync.user && sync.status==='connecting'){
+        slog('gave up waiting after 12s');
         sync.detail = navigator.onLine===false ? 'no internet connection'
           : 'cannot reach the database — in Firebase, check that Firestore Database is created and the rules are published, and that no ad-blocker is blocking it';
         setSyncStatus('error');
@@ -2065,6 +2076,7 @@
       sync.seen[c] = {};
       var unsub = sync.fb.onSnapshot(sync.fb.collection(sync.db,'users',uid,c), {includeMetadataChanges:true}, function(snap){
         var changed = false;
+        slog(c+': snapshot, fromCache='+(snap.metadata ? snap.metadata.fromCache : '?')+', changes='+snap.docChanges().length);
         snap.docChanges().forEach(function(ch){
           if(ch.type==='removed') return;
           sync.seen[c][ch.doc.id] = 1;
@@ -2082,6 +2094,7 @@
       sync.unsubs.push(unsub);
     });
     sync.unsubs.push(sync.fb.onSnapshot(sync.fb.doc(sync.db,'users',uid,'meta','settings'), {includeMetadataChanges:true}, function(snap){
+      slog('settings: snapshot, exists='+snap.exists()+', fromCache='+(snap.metadata ? snap.metadata.fromCache : '?'));
       if(snap.exists()){ if(applyRemoteSettings(snap.data())) afterRemote(); }
       else if(!(snap.metadata && snap.metadata.fromCache) && (state.settings.updatedAt||0)>0) pushSettings();
     }, fbErr));

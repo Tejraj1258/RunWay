@@ -481,7 +481,7 @@
           <button class="btn secondary" id="syncSignOut" style="display:none;">Sign out</button>
           <span class="sub" id="syncStatus"></span>
         </div>
-        <details style="margin-top:12px;"><summary class="sub" style="cursor:pointer;">Technical details</summary><pre id="syncLog" style="white-space:pre-wrap; font-family:'IBM Plex Mono'; font-size:11.5px; color:var(--slate); margin:8px 0 0;"></pre></details>
+        <details style="margin-top:12px;"><summary class="sub" style="cursor:pointer;">Technical details</summary><div class="row" style="margin:10px 0 4px; align-items:center;"><span class="sub">Connection mode</span><select id="syncMode"><option value="auto">Automatic (recommended)</option><option value="stream">Streaming</option><option value="poll">Long-polling</option></select><button class="btn secondary" id="syncModeApply">Apply &amp; reload</button></div><pre id="syncLog" style="white-space:pre-wrap; font-family:'IBM Plex Mono'; font-size:11.5px; color:var(--slate); margin:8px 0 0;"></pre></details>
         <div id="fbCfgBox" style="margin-top:14px;">
           <span class="label">Firebase setup (one time per device)</span>
           <p class="note">Paste the <b>firebaseConfig</b> block from your Firebase project (Project settings → Your apps).</p>
@@ -1873,7 +1873,7 @@
   var sync = {
     status:'off', detail:'', cfg:null, user:null, fb:null, db:null, auth:null, started:false,
     tombs:{items:{},timetable:{},events:{}}, last:{items:{},timetable:{},events:{}}, setHash:'',
-    unsubs:[], seen:{}, gotServer:{}, redrawT:null, connT:null, log:[]
+    unsubs:[], seen:{}, gotServer:{}, redrawT:null, connT:null, log:[], mode:'auto'
   };
 
   function effU(r){ return r.updatedAt || r.createdAt || 1; }
@@ -2035,8 +2035,15 @@
       var A = mods[0], Au = mods[1], F = mods[2];
       var app = A.initializeApp(sync.cfg);
       sync.auth = Au.getAuth(app);
-      try{ sync.db = F.initializeFirestore(app, {localCache: F.persistentLocalCache({tabManager: F.persistentMultipleTabManager()}), experimentalForceLongPolling:true}); }
-      catch(e){ try{ sync.db = F.initializeFirestore(app, {experimentalForceLongPolling:true}); }catch(e2){ sync.db = F.getFirestore(app); } }
+      // In-memory cache (no multi-window leader election): my own sync layer already keeps the local copy and re-uploads offline edits.
+      var mode = 'auto'; try{ mode = localStorage.getItem('runway:syncmode') || 'auto'; }catch(e){}
+      var fsSet = {};
+      if(F.memoryLocalCache){ try{ fsSet.localCache = F.memoryLocalCache(); }catch(e){} }
+      if(mode==='poll') fsSet.experimentalForceLongPolling = true;
+      else if(mode==='auto') fsSet.experimentalAutoDetectLongPolling = true;
+      try{ sync.db = F.initializeFirestore(app, fsSet); }
+      catch(e){ try{ sync.db = F.getFirestore(app); }catch(e2){ throw e2; } }
+      sync.mode = mode; slog('connection mode: '+mode+' (memory cache)');
       sync.fb = {getFirestore:F.getFirestore, doc:F.doc, collection:F.collection, setDoc:F.setDoc, onSnapshot:F.onSnapshot, signInWithPopup:Au.signInWithPopup, GoogleAuthProvider:Au.GoogleAuthProvider, signOut:Au.signOut};
       Au.onAuthStateChanged(sync.auth, function(u){
         slog('auth: '+(u ? 'signed in' : 'signed out'));
@@ -2063,7 +2070,7 @@
   function startListening(){
     var uid = sync.user.uid;
     clearTimeout(sync.connT);
-    slog('listening started (long-polling mode)');
+    slog('listening started');
     sync.connT = setTimeout(function(){
       if(sync.user && sync.status==='connecting'){
         slog('gave up waiting after 12s');
@@ -2138,6 +2145,8 @@
     if(store.mode==='claude'){ renderSyncCard(); return; }
     $('syncSignIn').onclick = syncSignIn;
     $('syncSignOut').onclick = syncSignOut;
+    try{ $('syncMode').value = localStorage.getItem('runway:syncmode') || 'auto'; }catch(e){}
+    $('syncModeApply').onclick = function(){ try{ localStorage.setItem('runway:syncmode', $('syncMode').value); }catch(e){} location.reload(); };
     $('fbSave').onclick = function(){
       var cfg = parseFirebaseConfig($('fbConfig').value);
       if(!cfg){ $('fbMsg').textContent = 'That does not look like the Firebase config. Copy the whole block that starts with const firebaseConfig = { … }.'; return; }

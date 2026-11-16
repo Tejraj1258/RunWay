@@ -1854,7 +1854,14 @@
   //  Each task / class / reminder is one document: users/{uid}/{collection}/{id} = {d:record, u:updatedAt, x:deleted}
   //  Newest updatedAt wins per record; deletions are kept as tombstones so they don't come back.
   // =====================================================================
-  var FIREBASE_CONFIG = null;          // <- paste your Firebase web config object here (or paste it in Settings → Sync)
+  var FIREBASE_CONFIG = {              // Firebase web config (public identifiers — your data is protected by the Firestore rules, not by hiding these)
+    apiKey: "AIzaSyAhlGoQK1SaJl9YWRS5UqxJzffDeae0dQ4",
+    authDomain: "runway-f80de.firebaseapp.com",
+    projectId: "runway-f80de",
+    storageBucket: "runway-f80de.firebasestorage.app",
+    messagingSenderId: "1026534547006",
+    appId: "1:1026534547006:web:ed8c3595517f952ac6fb6f"
+  };
   var FB_VERSION = '13.2.0';
   var COLLS = ['items','timetable','events'];
   var COLL = {
@@ -1987,9 +1994,11 @@
   }
 
   function parseFirebaseConfig(text){
-    var a = text.indexOf('{'), b = text.lastIndexOf('}');
+    var k = text.indexOf('apiKey');                     // the pasted block may also contain import { initializeApp } lines — find the object that holds apiKey
+    if(k<0) return null;
+    var a = text.lastIndexOf('{', k), b = text.indexOf('}', k);
     if(a<0 || b<a) return null;
-    var body = text.slice(a, b+1).replace(/\/\/.*$/gm,'').replace(/([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:/g,'$1"$2":').replace(/,\s*}/g,'}');
+    var body = text.slice(a, b+1).replace(/^\s*\/\/.*$/gm,'').replace(/([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:/g,'$1"$2":').replace(/,\s*}/g,'}');
     try{ var o = JSON.parse(body); }catch(e){ return null; }
     if(!o || typeof o.apiKey!=='string' || typeof o.projectId!=='string' || typeof o.appId!=='string') return null;
     var out = {}; ['apiKey','authDomain','projectId','storageBucket','messagingSenderId','appId','measurementId'].forEach(function(k){ if(typeof o[k]==='string') out[k]=o[k]; });

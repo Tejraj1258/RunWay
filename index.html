@@ -13,7 +13,6 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{
-    --ink:#000000;
     --ink-soft:#C7CBD1;
     --text:#ECEDEE;
     --paper:#000000;
@@ -28,7 +27,6 @@
     --rose-dim:rgba(208,105,110,0.16);
     --slate:#8B93A0;
     --line:#242629;
-    --line-soft:#1D1F22;
     --radius:10px;
     --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.45);
   }
@@ -156,13 +154,9 @@
 
   .empty{padding:30px 10px; text-align:center; color:var(--slate); font-size:13.5px; line-height:1.7;}
 
-  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
   .form-stack{display:flex; flex-direction:column; gap:12px; margin-top:12px;}
   .row{display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;}
   .field{display:flex; flex-direction:column; gap:5px; flex:1; min-width:120px;}
-  .radio-group{display:flex; gap:6px;}
-  .radio-opt{padding:8px 12px; border:1px solid var(--line); border-radius:7px; font-size:12.5px; background:var(--panel-2); color:var(--text);}
-  .radio-opt.sel{background:#fff; color:#0A0B0D; border-color:#fff;}
 
   .tt-day{margin-bottom:16px;}
   .tt-day h4{font-family:'Space Grotesk'; font-size:13px; margin:0 0 6px; text-transform:uppercase; letter-spacing:0.05em; color:var(--ink-soft);}
@@ -194,7 +188,6 @@
   .review-row .rtime{width:82px;}
   .review-row .rsubject{flex:1; min-width:100px;}
 
-  .event-date b{display:block; color:var(--text); font-size:12.5px;}
   .comingup-chip{background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:9px 13px; font-size:12px; white-space:nowrap; flex-shrink:0; color:var(--text);}
   .comingup-chip span{color:var(--slate); font-size:11px;}
   .preview-box{background:var(--teal-dim); border:1px solid #2B4A47; border-radius:9px; padding:14px; margin-top:12px;}
@@ -227,9 +220,6 @@
     #bottomnav .navitem{flex-direction:column; gap:3px; font-size:10.5px; padding:6px 8px; text-align:center;}
     #bottomnav .navitem .ico{font-size:17px;}
     .mobiletop{display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;}
-    .mobiletop .brand h1{color:var(--text);}
-    .mobiletop .brand .mark{}
-    .grid2{grid-template-columns:1fr;}
   }
   .mobiletop{display:none;}
   @media (max-width:760px){ .mobiletop{display:flex; align-items:baseline; gap:8px; margin-bottom:6px;} .mobiletop h1{font-family:'Space Grotesk'; font-size:15px; margin:0; letter-spacing:0.05em; color:var(--text);} .mobiletop .mark{width:8px;height:8px;background:var(--teal);display:inline-block;border-radius:2px;transform:rotate(45deg);} }
@@ -481,7 +471,7 @@
           <button class="btn secondary" id="syncSignOut" style="display:none;">Sign out</button>
           <span class="sub" id="syncStatus"></span>
         </div>
-        <details style="margin-top:12px;"><summary class="sub" style="cursor:pointer;">Technical details</summary><div class="row" style="margin:10px 0 4px; align-items:center;"><span class="sub">Connection mode</span><select id="syncMode"><option value="auto">Automatic (recommended)</option><option value="stream">Streaming</option><option value="poll">Long-polling</option></select><button class="btn secondary" id="syncModeApply">Apply &amp; reload</button></div><pre id="syncLog" style="white-space:pre-wrap; font-family:'IBM Plex Mono'; font-size:11.5px; color:var(--slate); margin:8px 0 0;"></pre></details>
+        <details style="margin-top:12px;"><summary class="sub" style="cursor:pointer;">Technical details</summary><div class="row" style="margin:10px 0 4px; align-items:center;"><span class="sub">Connection mode</span><select id="syncMode"><option value="auto">Automatic (live, falls back to REST)</option><option value="stream">Live connection only</option><option value="poll">Live, long-polling</option><option value="rest">REST polling only</option></select><button class="btn secondary" id="syncModeApply">Apply &amp; reload</button><button class="btn secondary" id="syncCheck">Run connection check</button></div><pre id="syncLog" style="white-space:pre-wrap; font-family:'IBM Plex Mono'; font-size:11.5px; color:var(--slate); margin:8px 0 0;"></pre></details>
         <div id="fbCfgBox" style="margin-top:14px;">
           <span class="label">Firebase setup (one time per device)</span>
           <p class="note">Paste the <b>firebaseConfig</b> block from your Firebase project (Project settings → Your apps).</p>
@@ -1864,6 +1854,7 @@
     appId: "1:1026534547006:web:ed8c3595517f952ac6fb6f"
   };
   var FB_VERSION = '13.2.0';
+  var FIREBASE_DB_ID = '(default)';
   var COLLS = ['items','timetable','events'];
   var COLL = {
     items:     {get:function(){ return state.items; },     set:function(a){ state.items=a; },     norm:normItem},
@@ -1885,7 +1876,7 @@
     sync.setHash = setHashOf();
   }
   function persistTombs(){ try{ store.set('tombs', JSON.stringify(sync.tombs)); }catch(e){} }
-  function syncLive(){ return !!(sync.fb && sync.db && sync.user); }
+  function syncLive(){ return !!(sync.user && (sync.restActive || (sync.fb && sync.db))); }
 
   // Called before every local save: stamps changed records, records deletions, and uploads them if signed in.
   function syncStamp(k){
@@ -2010,7 +2001,7 @@
       signedout:'Not signed in — saved in this browser only.', connecting:'Connecting…', online:'Synced', offline:'Offline — changes upload when you are back online.',
       error:'Sync problem'
     }[sync.status] || '';
-    if(sync.status==='online' && sync.user) label = 'Synced as '+(sync.user.email||'your account');
+    if(sync.status==='online' && sync.user) label = 'Synced as '+(sync.user.email||'your account')+(sync.restActive ? ' (REST polling every 15 s)' : '');
     if(sync.status==='error' && sync.detail) label += ' ('+sync.detail+')';
     if(sync.status==='online' && typeof navigator!=='undefined' && navigator.onLine===false) label = 'Offline — changes upload when you are back online.';
     var f = $('sidebarFoot');
@@ -2038,7 +2029,7 @@
   }
 
   function restRoot(){
-    return 'https://firestore.googleapis.com/v1/projects/'+encodeURIComponent(sync.cfg.projectId)+'/databases/(default)/documents';
+    return 'https://firestore.googleapis.com/v1/projects/'+encodeURIComponent(sync.cfg.projectId)+'/databases/'+encodeURIComponent(FIREBASE_DB_ID)+'/documents';
   }
   function restEncode(v){
     if(v===null) return {nullValue:null};
@@ -2131,9 +2122,10 @@
   async function restPollCollection(collection, lastSeen, user){
     var parent='users/'+encodeURIComponent(user.uid);
     var url=restRoot()+'/'+parent+':runQuery';
+    var since=Math.max(0,lastSeen-300000);
     var body={structuredQuery:{
       from:[{collectionId:collection}],
-      where:{fieldFilter:{field:{fieldPath:'u'},op:'GREATER_THAN',value:{integerValue:String(lastSeen)}}}
+      where:{fieldFilter:{field:{fieldPath:'u'},op:'GREATER_THAN',value:{integerValue:String(since)}}}
     }};
     var rows=await restFetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},user,'runQuery '+collection);
     if(sync.user!==user || !sync.restActive) return;
@@ -2192,6 +2184,17 @@
     pollRest();
     sync.restTimer=setInterval(pollRest,15000);
   }
+  async function connectionCheck(){
+    if(!sync.user){ slog('check: sign in first'); return; }
+    slog('check: requesting the signed-in user collection over HTTPS');
+    var started=Date.now();
+    try{
+      await restFetch(restRoot()+'/users/'+encodeURIComponent(sync.user.uid)+'/items?pageSize=1',{method:'GET'},sync.user,'connection check');
+      slog('check: OK — authenticated database request succeeded ('+(Date.now()-started)+' ms)');
+    }catch(e){
+      slog('check: FAILED '+(e && e.code ? e.code+' ' : '')+(e && e.message ? String(e.message).slice(0,200) : 'unknown error')+' ('+(Date.now()-started)+' ms)');
+    }
+  }
 
   async function startSync(){
     if(store.mode!=='local' || sync.started) return;
@@ -2200,22 +2203,27 @@
     if(location.protocol!=='http:' && location.protocol!=='https:'){ setSyncStatus('needhost'); return; }
     sync.started = true; setSyncStatus('connecting');
     try{
+      var mode='auto'; try{ mode=localStorage.getItem('runway:syncmode')||'auto'; }catch(e){}
       var base = 'https://www.gstatic.com/firebasejs/'+FB_VERSION+'/';
-      var mods = await Promise.all([import(base+'firebase-app.js'), import(base+'firebase-auth.js'), import(base+'firebase-firestore.js')]);
+      var mods = await Promise.all([import(base+'firebase-app.js'), import(base+'firebase-auth.js'), mode==='rest' ? Promise.resolve(null) : import(base+'firebase-firestore.js')]);
       var A = mods[0], Au = mods[1], F = mods[2];
-      F.setLogLevel('debug');
+      if(F) F.setLogLevel('debug');
       var app = A.initializeApp(sync.cfg);
       sync.auth = Au.getAuth(app);
-      // In-memory cache (no multi-window leader election): my own sync layer already keeps the local copy and re-uploads offline edits.
-      var mode = 'auto'; try{ mode = localStorage.getItem('runway:syncmode') || 'auto'; }catch(e){}
-      var fsSet = {};
-      if(F.memoryLocalCache){ try{ fsSet.localCache = F.memoryLocalCache(); }catch(e){} }
-      if(mode==='poll') fsSet.experimentalForceLongPolling = true;
-      else if(mode==='auto') fsSet.experimentalAutoDetectLongPolling = true;
-      try{ sync.db = F.initializeFirestore(app, fsSet); }
-      catch(e){ slog('initializeFirestore failed: '+(e && e.message ? e.message : e)); try{ sync.db = F.getFirestore(app); }catch(e2){ throw e2; } }
-      sync.mode = mode; slog('connection mode: '+mode+' (memory cache)');
-      sync.fb = {getFirestore:F.getFirestore, doc:F.doc, collection:F.collection, setDoc:F.setDoc, onSnapshot:F.onSnapshot, signInWithPopup:Au.signInWithPopup, GoogleAuthProvider:Au.GoogleAuthProvider, signOut:Au.signOut};
+      if(F){
+        // In-memory cache (no multi-window leader election): the app's sync layer keeps its own local copy.
+        var fsSet = {};
+        if(F.memoryLocalCache){ try{ fsSet.localCache = F.memoryLocalCache(); }catch(e){} }
+        if(mode==='poll') fsSet.experimentalForceLongPolling = true;
+        else if(mode==='auto') fsSet.experimentalAutoDetectLongPolling = true;
+        try{ sync.db = F.initializeFirestore(app, fsSet, FIREBASE_DB_ID); }
+        catch(e){ slog('initializeFirestore failed: '+(e && e.message ? e.message : e)); try{ sync.db = F.getFirestore(app, FIREBASE_DB_ID); }catch(e2){ throw e2; } }
+        slog('connection mode: '+mode+' (memory cache), database: '+FIREBASE_DB_ID);
+      }else{
+        slog('connection mode: REST polling only');
+      }
+      sync.mode=F ? mode : 'rest';
+      sync.fb = {getFirestore:F&&F.getFirestore, doc:F&&F.doc, collection:F&&F.collection, setDoc:F&&F.setDoc, onSnapshot:F&&F.onSnapshot, signInWithPopup:Au.signInWithPopup, GoogleAuthProvider:Au.GoogleAuthProvider, signOut:Au.signOut};
       Au.onAuthStateChanged(sync.auth, function(u){
         slog('auth: '+(u ? 'signed in' : 'signed out'));
         stopListening();
@@ -2230,7 +2238,8 @@
           }
         }
         try{ localStorage.setItem('runway:syncuid', u.uid); }catch(e){}
-        setSyncStatus('connecting'); startListening();
+        setSyncStatus('connecting');
+        if(sync.mode==='rest') startRestPolling(); else startListening();
       });
       setSyncStatus('signedout');
     }catch(e){
@@ -2248,10 +2257,14 @@
     slog('listening started');
     sync.connT = setTimeout(function(){
       if(sync.user && sync.status==='connecting'){
-        slog('gave up waiting after 12s');
-        sync.detail = navigator.onLine===false ? 'no internet connection; trying REST polling' : 'live stream timed out; trying REST polling';
-        setSyncStatus('connecting');
-        startRestPolling();
+        if(sync.mode!=='stream'){
+          slog('live stream unavailable; switching to REST polling');
+          startRestPolling();
+        }else{
+          slog('gave up waiting after 12s');
+          sync.detail = navigator.onLine===false ? 'no internet connection' : 'live stream timed out';
+          setSyncStatus('error');
+        }
       }
     }, 12000);
     COLLS.forEach(function(c){
@@ -2272,14 +2285,14 @@
         }
         if(changed) afterRemote();
         if(sync.gotServer.items && sync.gotServer.timetable && sync.gotServer.events){ clearTimeout(sync.connT); sync.detail=''; setSyncStatus('online'); }
-      }, function(e){ fbErr(e); startRestPolling(); });
+      }, function(e){ fbErr(e); if(sync.mode!=='stream') startRestPolling(); });
       sync.unsubs.push(unsub);
     });
     sync.unsubs.push(sync.fb.onSnapshot(sync.fb.doc(sync.db,'users',uid,'meta','settings'), {includeMetadataChanges:true}, function(snap){
       slog('settings: snapshot, exists='+snap.exists()+', fromCache='+(snap.metadata ? snap.metadata.fromCache : '?'));
       if(snap.exists()){ if(applyRemoteSettings(snap.data())) afterRemote(); }
       else if(!(snap.metadata && snap.metadata.fromCache) && (state.settings.updatedAt||0)>0) pushSettings();
-    }, function(e){ fbErr(e); startRestPolling(); }));
+    }, function(e){ fbErr(e); if(sync.mode!=='stream') startRestPolling(); }));
   }
   async function syncSignIn(){
     if(!sync.fb){ await startSync(); }
@@ -2321,6 +2334,7 @@
     $('syncSignIn').onclick = syncSignIn;
     $('syncSignOut').onclick = syncSignOut;
     try{ $('syncMode').value = localStorage.getItem('runway:syncmode') || 'auto'; }catch(e){}
+    $('syncCheck').onclick = connectionCheck;
     $('syncModeApply').onclick = function(){ try{ localStorage.setItem('runway:syncmode', $('syncMode').value); }catch(e){} location.reload(); };
     $('fbSave').onclick = function(){
       var cfg = parseFirebaseConfig($('fbConfig').value);

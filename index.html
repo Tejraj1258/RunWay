@@ -153,6 +153,24 @@
   .progress-mini-fill{height:100%; background:var(--teal);}
   .cat-group{margin-top:18px;}
   .cat-group h4{font-family:'Space Grotesk'; font-size:13px; margin:0 0 4px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.04em;}
+  /* ===== TASK SUBTASK SUPPORT START ===== */
+  .item-title[data-act=edit]{cursor:pointer;}
+  .task-subtasks{margin:0 0 8px 36px;padding:4px 0 8px 12px;border-left:1px solid var(--line);}
+  .task-subtask{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;color:var(--text);}
+  .task-subtask input{accent-color:var(--teal);}
+  .task-subtask.done span{text-decoration:line-through;color:var(--slate);}
+  .task-expand{border:0;background:transparent;color:var(--slate);cursor:pointer;padding:2px 4px;}
+  .edit-modal{max-width:680px;max-height:90vh;overflow:auto;}
+  .edit-subtasks{max-height:38vh;overflow:auto;margin:10px 0;border-top:1px solid var(--line);}
+  .edit-subtask{display:grid;grid-template-columns:minmax(120px,2fr) minmax(120px,1fr) 100px auto;gap:8px;padding:10px 0;border-bottom:1px solid var(--line);}
+  .edit-subtask input,.edit-subtask select{min-width:0;width:100%;padding:7px 8px;font-size:12px;}
+  .edit-subtask textarea{grid-column:1/4;min-height:54px;padding:7px 8px;border:1px solid var(--line);border-radius:7px;background:var(--panel-2);color:var(--text);font:inherit;}
+  .edit-subtask-actions{display:flex;gap:4px;align-items:center;grid-row:1/3;grid-column:4;}
+  .edit-subtask-done{display:flex;gap:5px;align-items:center;font-size:11px;color:var(--slate);}
+  .syllabus-sort-label{margin:8px 0;color:var(--teal);}
+  .syllabus-course-preview{margin:10px 0;}
+  @media (max-width:600px){.edit-subtask{grid-template-columns:1fr 1fr;}.edit-subtask textarea{grid-column:1/-1;}.edit-subtask-actions{grid-row:auto;grid-column:1/-1;}}
+  /* ===== TASK SUBTASK SUPPORT END ===== */
 
   .empty{padding:30px 10px; text-align:center; color:var(--slate); font-size:13.5px; line-height:1.7;}
 
@@ -566,10 +584,36 @@
   </div>
 </div>
 
+<!-- ===== TASK EDIT DIALOG START ===== -->
+<div class="modal-bg" id="taskEditModal">
+  <div class="modal edit-modal" role="dialog" aria-modal="true" aria-labelledby="taskEditHeading">
+    <h3 id="taskEditHeading">Edit task</h3>
+    <div class="form-stack">
+      <div class="field"><label class="label" for="editTaskTitle">Title</label><input id="editTaskTitle" type="text" maxlength="200"></div>
+      <div class="row">
+        <div class="field"><label class="label" for="editTaskDeadline">Deadline</label><input id="editTaskDeadline" type="date"></div>
+        <div class="field"><label class="label" for="editTaskPriority">Priority</label><select id="editTaskPriority"><option value="1">1 — Low</option><option value="2">2</option><option value="3">3 — Medium</option><option value="4">4</option><option value="5">5 — High</option></select></div>
+      </div>
+      <div class="field"><label class="label" for="editTaskNotes">Notes</label><textarea id="editTaskNotes" style="min-height:70px;padding:8px;border:1px solid var(--line);border-radius:7px;background:var(--panel-2);color:var(--text);font:inherit;"></textarea></div>
+      <label class="edit-subtask-done"><input id="editTaskDone" type="checkbox"> Done</label>
+      <div class="subhead">Subtasks</div>
+      <div class="edit-subtasks" id="editSubtaskList"></div>
+      <button class="btn secondary" id="editAddSubtaskBtn" type="button">Add subtask</button>
+      <div class="row">
+        <button class="btn" id="editTaskSaveBtn" type="button">Save</button>
+        <button class="btn secondary" id="editTaskCancelBtn" type="button">Cancel</button>
+        <button class="btn danger" id="editTaskDeleteBtn" type="button" style="margin-left:auto;">Delete</button>
+      </div>
+      <div class="syllabus-message" id="taskEditMessage" aria-live="polite"></div>
+    </div>
+  </div>
+</div>
+<!-- ===== TASK EDIT DIALOG END ===== -->
+
 <div class="modal-bg" id="syllabusModal">
   <div class="modal syllabus-modal" role="dialog" aria-modal="true" aria-labelledby="syllabusHeading">
     <h3 id="syllabusHeading">Import from course syllabus / overview</h3>
-    <p>Review every task before anything is added.</p>
+    <p>Review the course and its subtasks before anything is added.</p>
     <div id="syllabusInputView">
       <label class="label" for="syllabusText">Course syllabus or overview</label>
       <textarea id="syllabusText" placeholder="Paste your course syllabus or overview here"></textarea>
@@ -582,9 +626,11 @@
       <div class="row"><button class="btn" id="syllabusCreateBtn">Create tasks</button><button class="btn secondary" id="syllabusCancelBtn">Cancel</button></div>
     </div>
     <div id="syllabusPreviewView" style="display:none;">
+      <div id="syllabusSortLabel" class="note syllabus-sort-label"></div>
+      <div class="field syllabus-course-preview"><label class="label" for="syllabusPreviewCourse">Course</label><input type="text" id="syllabusPreviewCourse" maxlength="80"></div>
       <div id="syllabusCount" class="note"></div>
       <div class="syllabus-preview" id="syllabusPreviewList"></div>
-      <div class="row"><button class="btn" id="syllabusAddBtn">Add selected tasks</button><button class="btn secondary" id="syllabusBackBtn">Back</button></div>
+      <div class="row"><button class="btn" id="syllabusAddBtn">Add course</button><button class="btn secondary" id="syllabusBackBtn">Back</button></div>
     </div>
     <div class="syllabus-message" id="syllabusMessage" aria-live="polite"></div>
   </div>
@@ -675,7 +721,7 @@
   var MODEL_DEFAULTS = {openai:'gpt-6.1-terra', claude:'claude-sonnet-5-5', gemini:'gemini-3.8-flash'};
   var PROVIDER_LABEL = {openai:'ChatGPT (OpenAI)', claude:'Claude', gemini:'Gemini'};
   var state = {
-    items: [],       // {id,title,type:'project'|'homework',category,subject,estMinutes,remainingMinutes,priority,deadline,status,createdAt}
+    items: [],       // {id,title,type,category,subject,estMinutes,remainingMinutes,priority,deadline,status,createdAt,notes,subtasks:[{id,title,deadline,priority,notes,done}]}
     timetable: [],   // {id,day,start,end,subject}
     events: [],      // {id,title,date:'YYYY-MM-DD',time:'HH:MM'|null,approx,createdAt}
     settings: {dayStart:'07:00', dayEnd:'23:00', aiProvider:null, maxFocusHours:6, models:{}}
@@ -695,7 +741,7 @@
     var est = Math.max(5, Math.round(+it.estMinutes)||30);
     var rem = isFinite(+it.remainingMinutes) && it.remainingMinutes!==null ? Math.max(0, Math.round(+it.remainingMinutes)) : est;
     var done = it.status==='done';
-    return {
+    var out = {
       id: it.id, title: String(it.title).slice(0,200),
       type: it.type==='homework' ? 'homework' : 'project',
       category: typeof it.category==='string' ? it.category.slice(0,80) : '',
@@ -705,6 +751,23 @@
       deadline: (typeof it.deadline==='string' && DATE_RE.test(it.deadline)) ? it.deadline : null,
       status: done ? 'done' : 'pending', createdAt: +it.createdAt || Date.now()
     };
+    /* ===== TASK SUBTASK SUPPORT START ===== */
+    try{
+      if(typeof it.notes==='string') out.notes=it.notes.slice(0,2000);
+      if(Array.isArray(it.subtasks)){
+        out.subtasks=it.subtasks.map(function(sub){
+          try{
+            if(!sub || typeof sub.id!=='string' || typeof sub.title!=='string') return null;
+            return {id:sub.id,title:sub.title.slice(0,200),
+              deadline:sub.deadline==='' || sub.deadline==null ? '' : (syllabusDateIsValid(sub.deadline)?sub.deadline:''),
+              priority:['high','medium','low'].indexOf(sub.priority)>=0?sub.priority:'medium',
+              notes:typeof sub.notes==='string'?sub.notes.slice(0,1000):'',done:!!sub.done};
+          }catch(e){ return null; }
+        }).filter(Boolean);
+      }
+    }catch(e){ out.subtasks=[]; }
+    /* ===== TASK SUBTASK SUPPORT END ===== */
+    return out;
   }
   function normBlock(b){
     if(!b || typeof b.id!=='string' || typeof b.subject!=='string') return null;
@@ -788,7 +851,30 @@
   function pendingItems(){
     return state.items.filter(function(it){ return it.status!=='done' && it.remainingMinutes>0; });
   }
-  function freshPool(){ return pendingItems().map(function(it){ return {ref:it, left:it.remainingMinutes}; }); }
+  /* ===== SCHEDULABLE SUBTASK ITEMS START ===== */
+  function getSchedulableItems(){
+    try{
+      var items=[];
+      state.items.forEach(function(it){
+        if(!Array.isArray(it.subtasks) || !it.subtasks.length){ items.push(it); return; }
+        it.subtasks.forEach(function(sub){
+          if(sub.deadline){
+            var priority=sub.priority==='high'?5:(sub.priority==='low'?1:3);
+            items.push({id:it.id+'::'+sub.id,parentId:it.id,subtaskId:sub.id,
+              title:it.title+': '+sub.title,deadline:sub.deadline,priority:priority,
+              status:sub.done?'done':'pending',type:'project',category:it.category||'Other',subject:'',
+              estMinutes:30,remainingMinutes:sub.done?0:30,createdAt:it.createdAt});
+          }
+        });
+      });
+      return items;
+    }catch(e){
+      toast('Subtasks could not be added to planning; using regular tasks.');
+      return state.items;
+    }
+  }
+  /* ===== SCHEDULABLE SUBTASK ITEMS END ===== */
+  function freshPool(){ return getSchedulableItems().filter(function(it){ return it.status!=='done' && it.remainingMinutes>0; }).map(function(it){ return {ref:it, left:it.remainingMinutes}; }); }
 
   // Single-gap helper used by the "I have X minutes" box.
   function ruleBasedFit(gaps, items){
@@ -890,7 +976,7 @@
     var today = todayISO();
     if(startISO<today) startISO = today;
     var maxDl = null;
-    pendingItems().forEach(function(it){ if(it.deadline && (!maxDl || it.deadline>maxDl)) maxDl = it.deadline; });
+    getSchedulableItems().filter(function(it){ return it.status!=='done'; }).forEach(function(it){ if(it.deadline && (!maxDl || it.deadline>maxDl)) maxDl = it.deadline; });
     if(maxDl){
       var ext = dateISO(addDays(parseISO(maxDl),1));
       if(ext>endISO) endISO = ext;
@@ -1065,7 +1151,7 @@
     if(from>=to){ toast('Outside your active hours.'); return; }
     var gaps = freeGaps(from, to, todayISO());
     if(gaps.length===0){ toast('No free time left today — fully booked.'); return; }
-    var pool = pendingItems();
+    var pool = getSchedulableItems().filter(function(it){ return it.status!=='done' && it.remainingMinutes>0; });
     if(pool.length===0){ toast('No pending tasks to schedule.'); return; }
     if(!aiReady()){ toast('Add an API key in Settings to use AI — used the built-in planner.'); buildTodayPlan(true); return; }
     toast('Asking '+providerLabel()+'…');
@@ -1313,7 +1399,7 @@
 
   function quickPlan(minutes){
     var from = nowMinutes();
-    renderQuickResult(ruleBasedFit([{start:from, end:from+minutes}], pendingItems()));
+    renderQuickResult(ruleBasedFit([{start:from, end:from+minutes}], getSchedulableItems().filter(function(it){ return it.status!=='done' && it.remainingMinutes>0; })));
   }
 
   // =====================================================================
@@ -1417,6 +1503,11 @@
   function rowHtml(it, rank){
     var done = it.status==='done';
     var pct = it.estMinutes>0 ? Math.round(((it.estMinutes-it.remainingMinutes)/it.estMinutes)*100) : 0;
+    /* ===== TASK SUBTASK SUPPORT START ===== */
+    var subtasks=Array.isArray(it.subtasks)?it.subtasks:[];
+    var subDone=subtasks.filter(function(sub){ return sub.done; }).length;
+    var expanded=expandedSubtasks[it.id]!==false;
+    /* ===== TASK SUBTASK SUPPORT END ===== */
     var meta = [];
     if(it.type==='homework') meta.push('<span class="pill amber">College</span>');
     var where = it.type==='homework' ? it.subject : it.category;
@@ -1429,8 +1520,12 @@
     return '<div class="item-row" data-id="'+esc(it.id)+'">'+
       (rank ? '<div class="rank-no">'+rank+'</div>' : '')+
       '<div class="item-check '+(done?'done':'')+'" data-act="toggle">'+(done?'✓':'')+'</div>'+
-      '<div class="item-main"><div class="item-title '+(done?'done':'')+'">'+esc(it.title)+'</div><div class="item-meta">'+meta.join(' · ')+'</div></div>'+
-      '<button class="btn ghost" data-act="del">Delete</button></div>';
+      '<div class="item-main"><div class="item-title '+(done?'done':'')+'" data-act="edit">'+esc(it.title)+'</div><div class="item-meta">'+meta.join(' · ')+(subtasks.length?' · <span>'+subDone+'/'+subtasks.length+' done</span>':'')+'</div></div>'+
+      (subtasks.length?'<button class="task-expand" data-act="expand" aria-label="'+(expanded?'Collapse':'Expand')+' subtasks">'+(expanded?'▾':'▸')+'</button>':'')+
+      '<button class="btn ghost" data-act="del">Delete</button></div>'+
+      (subtasks.length?'<div class="task-subtasks" data-subtasks-for="'+esc(it.id)+'" style="display:'+(expanded?'':'none')+'">'+subtasks.map(function(sub){
+        return '<label class="task-subtask '+(sub.done?'done':'')+'"><input type="checkbox" data-act="subtoggle" data-subtask-id="'+esc(sub.id)+'" '+(sub.done?'checked':'')+'><span>'+esc(sub.title)+'</span>'+(sub.deadline?'<span class="sub">'+esc(sub.deadline)+'</span>':'')+'</label>';
+      }).join('')+'</div>':'');
   }
   function renderTaskList(){
     var card = $('taskListCard');
@@ -1469,6 +1564,139 @@
     card.innerHTML = hw.map(function(it){ return rowHtml(it); }).join('');
     bindItemRows();
   }
+  /* ===== TASK EDIT AND DELETE SUPPORT START ===== */
+  var expandedSubtasks={};
+  var editTaskId=null, editTaskDraft=null;
+  async function saveItemsAndVerify(){
+    try{
+      await saveItems();
+      return await store.get('items')===JSON.stringify(state.items);
+    }catch(e){ return false; }
+  }
+  function renderEditSubtasks(){
+    try{
+      var list=$('editSubtaskList');
+      list.innerHTML=(editTaskDraft.subtasks||[]).map(function(sub,index){
+        return '<div class="edit-subtask" data-edit-subtask="'+index+'">'+
+          '<input type="text" maxlength="200" data-field="title" value="'+esc(sub.title)+'" aria-label="Subtask title">'+
+          '<input type="date" data-field="deadline" value="'+esc(sub.deadline||'')+'" aria-label="Subtask deadline">'+
+          '<select data-field="priority" aria-label="Subtask priority"><option value="low"'+(sub.priority==='low'?' selected':'')+'>Low</option><option value="medium"'+(sub.priority==='medium'?' selected':'')+'>Medium</option><option value="high"'+(sub.priority==='high'?' selected':'')+'>High</option></select>'+
+          '<div class="edit-subtask-actions"><label class="edit-subtask-done"><input type="checkbox" data-field="done" '+(sub.done?'checked':'')+'> Done</label><button class="btn ghost" data-act="up" type="button" aria-label="Move up">↑</button><button class="btn ghost" data-act="down" type="button" aria-label="Move down">↓</button><button class="btn ghost" data-act="remove" type="button">Delete</button></div>'+
+          '<textarea data-field="notes" maxlength="1000" aria-label="Subtask notes">'+esc(sub.notes||'')+'</textarea></div>';
+      }).join('')||'<div class="note">No subtasks yet.</div>';
+      list.querySelectorAll('.edit-subtask').forEach(function(row){
+        try{
+          var index=+row.dataset.editSubtask, sub=editTaskDraft.subtasks[index];
+          row.querySelectorAll('[data-field]').forEach(function(field){
+            var sync=function(){ try{ sub[field.dataset.field]=field.type==='checkbox'?field.checked:field.value; }catch(e){ $('taskEditMessage').textContent='Could not update that subtask.'; } };
+            field.oninput=sync; field.onchange=sync;
+          });
+          row.querySelector('[data-act="remove"]').onclick=function(){ try{ editTaskDraft.subtasks.splice(index,1); renderEditSubtasks(); }catch(e){ $('taskEditMessage').textContent='Could not delete that subtask.'; } };
+          row.querySelector('[data-act="up"]').onclick=function(){ try{ if(index>0){ var prev=editTaskDraft.subtasks[index-1]; editTaskDraft.subtasks[index-1]=sub; editTaskDraft.subtasks[index]=prev; renderEditSubtasks(); } }catch(e){ $('taskEditMessage').textContent='Could not reorder that subtask.'; } };
+          row.querySelector('[data-act="down"]').onclick=function(){ try{ if(index<editTaskDraft.subtasks.length-1){ var next=editTaskDraft.subtasks[index+1]; editTaskDraft.subtasks[index+1]=sub; editTaskDraft.subtasks[index]=next; renderEditSubtasks(); } }catch(e){ $('taskEditMessage').textContent='Could not reorder that subtask.'; } };
+        }catch(e){ $('taskEditMessage').textContent='Could not show the subtask editor.'; }
+      });
+    }catch(e){ $('taskEditMessage').textContent='Could not show the subtask editor.'; }
+  }
+  function openTaskEditor(id){
+    try{
+      var item=state.items.find(function(it){ return it.id===id; });
+      if(!item) throw new Error('Task not found.');
+      editTaskId=id;
+      editTaskDraft={title:item.title,deadline:item.deadline||'',priority:item.priority,notes:item.notes||'',done:item.status==='done',
+        subtasks:(Array.isArray(item.subtasks)?item.subtasks:[]).map(function(sub){ return {id:sub.id,title:sub.title,deadline:sub.deadline||'',priority:sub.priority,notes:sub.notes||'',done:!!sub.done}; })};
+      $('editTaskTitle').value=editTaskDraft.title;
+      $('editTaskDeadline').value=editTaskDraft.deadline;
+      $('editTaskPriority').value=String(editTaskDraft.priority);
+      $('editTaskNotes').value=editTaskDraft.notes;
+      $('editTaskDone').checked=editTaskDraft.done;
+      $('taskEditMessage').textContent='';
+      renderEditSubtasks();
+      $('taskEditModal').classList.add('show');
+    }catch(e){ toast('Could not open this task for editing.'); }
+  }
+  function closeTaskEditor(){
+    try{ $('taskEditModal').classList.remove('show'); editTaskId=null; editTaskDraft=null; }
+    catch(e){ toast('Could not close the task editor.'); }
+  }
+  async function deleteTask(id, skipConfirm){
+    try{
+      var item=state.items.find(function(it){ return it.id===id; });
+      if(!item) return false;
+      var count=Array.isArray(item.subtasks)?item.subtasks.length:0;
+      if(!skipConfirm && count && !window.confirm('Delete "'+item.title+'" and its '+count+' subtask'+(count===1?'':'s')+'?')) return false;
+      var before=state.items.slice();
+      var beforePlan=todaysPlan.slice();
+      state.items=state.items.filter(function(it){ return it.id!==id; });
+      todaysPlan=todaysPlan.filter(function(block){ return block.itemId!==id; });
+      if(!await saveItemsAndVerify()){
+        state.items=before;
+        todaysPlan=beforePlan;
+        await saveItems();
+        toast('Could not delete the task. Your task list was left unchanged.');
+        return false;
+      }
+      refreshAll(); renderCalendar(); renderTimeline(); renderNow();
+      return true;
+    }catch(e){ toast('Could not delete the task.'); return false; }
+  }
+  async function toggleSubtask(parentId, subtaskId, done){
+    try{
+      var index=state.items.findIndex(function(it){ return it.id===parentId; });
+      if(index<0) return;
+      var before=state.items.slice(), parent=Object.assign({},state.items[index]);
+      parent.subtasks=(Array.isArray(parent.subtasks)?parent.subtasks:[]).map(function(sub){ return Object.assign({},sub); });
+      var sub=parent.subtasks.find(function(item){ return item.id===subtaskId; });
+      if(!sub) return;
+      sub.done=done;
+      var allDone=parent.subtasks.length>0&&parent.subtasks.every(function(item){ return item.done; });
+      parent.status=allDone?'done':'pending';
+      parent.remainingMinutes=allDone?0:(state.items[index].status==='done'?parent.estMinutes:parent.remainingMinutes);
+      state.items=state.items.slice(); state.items[index]=parent;
+      if(!await saveItemsAndVerify()){
+        state.items=before;
+        await saveItems();
+        toast('Could not save the subtask change.');
+        return;
+      }
+      refreshAll(); renderCalendar(); renderTimeline(); renderNow();
+    }catch(e){ toast('Could not save the subtask change.'); }
+  }
+  async function saveTaskEditor(){
+    try{
+      if(!editTaskId||!editTaskDraft) return;
+      var title=$('editTaskTitle').value.trim();
+      if(!title){ $('taskEditMessage').textContent='Task title is required.'; return; }
+      var index=state.items.findIndex(function(it){ return it.id===editTaskId; });
+      if(index<0) throw new Error('Task not found.');
+      var before=state.items.slice(), old=state.items[index];
+      var subs=editTaskDraft.subtasks.map(function(sub){
+        if(!sub.title.trim()) throw new Error('Every subtask needs a title.');
+        return {id:sub.id,title:sub.title.trim().slice(0,200),
+          deadline:sub.deadline&&syllabusDateIsValid(sub.deadline)?sub.deadline:'',
+          priority:['high','medium','low'].indexOf(sub.priority)>=0?sub.priority:'medium',
+          notes:String(sub.notes||'').slice(0,1000),done:!!sub.done};
+      });
+      var allDone=subs.length>0&&subs.every(function(sub){ return sub.done; });
+      var updated=Object.assign({},old,{title:title.slice(0,200),
+        deadline:syllabusDateIsValid($('editTaskDeadline').value)?$('editTaskDeadline').value:null,
+        priority:Math.min(5,Math.max(1,+$('editTaskPriority').value||3)),
+        notes:$('editTaskNotes').value.slice(0,2000),
+        status:($('editTaskDone').checked||allDone)?'done':'pending',
+        remainingMinutes:($('editTaskDone').checked||allDone)?0:(old.status==='done'?old.estMinutes:old.remainingMinutes)});
+      if(subs.length) updated.subtasks=subs;
+      else if(Array.isArray(old.subtasks)) updated.subtasks=[];
+      state.items=state.items.slice(); state.items[index]=updated;
+      if(!await saveItemsAndVerify()){
+        state.items=before; await saveItems();
+        $('taskEditMessage').textContent='Could not save changes. Your task was left unchanged.';
+        return;
+      }
+      closeTaskEditor(); refreshAll(); renderCalendar(); renderTimeline(); renderNow();
+      toast('Task saved.');
+    }catch(e){ $('taskEditMessage').textContent=e&&e.message==='Every subtask needs a title.'?e.message:'Could not save changes. Your task was left unchanged.'; }
+  }
+  /* ===== TASK EDIT AND DELETE SUPPORT END ===== */
   function bindItemRows(){
     document.querySelectorAll('.item-row').forEach(function(row){
       var id = row.dataset.id;
@@ -1480,10 +1708,14 @@
         saveItems(); renderTimeline(); renderNow(); refreshAll();
       };
       row.querySelector('[data-act="del"]').onclick = function(){
-        state.items = state.items.filter(function(x){ return x.id!==id; });
-        todaysPlan = todaysPlan.filter(function(p){ return p.itemId!==id; });
-        saveItems(); renderTimeline(); renderNow(); refreshAll();
+        deleteTask(id,false);
       };
+      row.querySelector('[data-act="edit"]').onclick=function(){ openTaskEditor(id); };
+      var expand=row.querySelector('[data-act="expand"]');
+      if(expand) expand.onclick=function(){ try{ expandedSubtasks[id]=expandedSubtasks[id]===false; renderTaskList(); renderHwList(); }catch(e){ toast('Could not update the subtask list.'); } };
+    });
+    document.querySelectorAll('[data-act="subtoggle"]').forEach(function(check){
+      check.onchange=function(){ var wrap=check.closest('[data-subtasks-for]'); if(wrap) toggleSubtask(wrap.dataset.subtasksFor,check.dataset.subtaskId,check.checked); };
     });
   }
 
@@ -1574,7 +1806,7 @@
       var d = addDays(gridStart, i), iso = dateISO(d), idx = weekdayIdx(d);
       var hasClass = state.timetable.some(function(b){ return b.day===idx; });
       var hasEv = state.events.some(function(e){ return e.date===iso; });
-      var hasDue = state.items.some(function(it){ return it.status!=='done' && it.deadline===iso; });
+      var hasDue = getSchedulableItems().some(function(it){ return it.status!=='done' && it.deadline===iso; });
       var plan = lastPlan.days[iso], focus = plan ? plan.focusMin : 0;
       html += '<button class="cal-cell'+(d.getMonth()!==first.getMonth()?' other':'')+(iso===today?' today':'')+(iso===selISO?' sel':'')+'" data-iso="'+iso+'">'+
         '<span class="cal-num">'+d.getDate()+'</span>'+
@@ -1620,7 +1852,7 @@
       if(iso>=today) html += '<div class="subhead">Suggested day</div>';
       html += timelineHtml(day.blocks, iso===today);
     }
-    var due = state.items.filter(function(it){ return it.deadline===iso; });
+    var due = getSchedulableItems().filter(function(it){ return it.deadline===iso; });
     if(due.length){
       html += '<div class="subhead">Due this day</div>'+due.map(function(it){
         return '<div class="mini-row"><span>'+(it.status==='done'?'✓ ':'')+esc(it.title)+'</span><span class="pill '+prioClass(it.priority)+'">P'+it.priority+'</span></div>';
@@ -1720,6 +1952,17 @@
   }
 
   function bindForms(){
+    /* ===== TASK EDIT DIALOG WIRING START ===== */
+    try{
+      $('editAddSubtaskBtn').onclick=function(){
+        try{ editTaskDraft.subtasks.push({id:uid(),title:'',deadline:'',priority:'medium',notes:'',done:false}); renderEditSubtasks(); }
+        catch(e){ $('taskEditMessage').textContent='Could not add a subtask.'; }
+      };
+      $('editTaskSaveBtn').onclick=saveTaskEditor;
+      $('editTaskCancelBtn').onclick=closeTaskEditor;
+      $('editTaskDeleteBtn').onclick=async function(){ if(await deleteTask(editTaskId,false)) closeTaskEditor(); };
+    }catch(e){ toast('Task editing could not be initialized.'); }
+    /* ===== TASK EDIT DIALOG WIRING END ===== */
     $('addTaskBtn').onclick = async function(){
       var title = $('t_title').value.trim();
       if(!title){ toast('Give it a title first.'); return; }
@@ -1898,6 +2141,8 @@
   // ===== SYLLABUS IMPORT START =====
   var syllabusTasks = [];
   var syllabusNotice = '';
+  var syllabusCourseName = '';
+  var syllabusSortText = '';
   var syllabusRunId = 0;
   var syllabusUndo = null;
   var syllabusUndoTimer = null;
@@ -1923,27 +2168,42 @@
       return {text:text.slice(0,20000), truncated:text.length>20000};
     }catch(e){ throw new Error('Could not read the syllabus text.'); }
   }
+  /* ===== SYLLABUS STRUCTURED IMPORT START ===== */
   function syllabusParseAI(reply){
     try{
       var text = String(reply||'').replace(/```(?:json)?/gi,'').trim();
-      var first = text.indexOf('['), last = text.lastIndexOf(']');
+      var first = text.indexOf('{'), last = text.lastIndexOf('}');
       if(first<0 || last<first) throw new Error('The AI reply was not a task list.');
       var parsed = JSON.parse(text.slice(first,last+1));
-      if(!Array.isArray(parsed)) throw new Error('The AI reply was not a task list.');
-      return parsed.map(function(item){
+      if(!parsed || typeof parsed!=='object' || Array.isArray(parsed) || !Array.isArray(parsed.tasks)) throw new Error('The AI reply was not a task list.');
+      var tasks=parsed.tasks.map(function(item){
         try{
           if(!item || typeof item!=='object' || Array.isArray(item)) return null;
           if(typeof item.title!=='string' || !item.title.trim()) return null;
           if(['high','medium','low'].indexOf(item.priority)<0) return null;
-          if(item.deadline!==null && item.deadline!==undefined && !syllabusDateIsValid(item.deadline)) return null;
-          if(item.notes!==undefined && typeof item.notes!=='string') return null;
-          var title = item.title.trim();
-          var notes = (item.notes||'').trim();
-          if(notes) title += ' — '+notes;
-          return {title:title.slice(0,200), deadline:item.deadline||null, priority:item.priority, notes:notes.slice(0,500), selected:true};
+          if(item.deadline!==null && !syllabusDateIsValid(item.deadline)) return null;
+          if(typeof item.notes!=='string') return null;
+          return {title:item.title.trim().slice(0,200),deadline:item.deadline||'',priority:item.priority,notes:item.notes.trim().slice(0,1000),selected:true};
         }catch(e){ return null; }
       }).filter(Boolean);
+      return {course:typeof parsed.course==='string'?parsed.course.trim().slice(0,80):'',tasks:tasks};
     }catch(e){ throw new Error('The AI reply could not be read as a task list.'); }
+  }
+  function syllabusInferCourse(text){
+    try{
+      var lines=String(text||'').split(/\r?\n/);
+      for(var i=0;i<lines.length;i++){
+        var labeled=lines[i].match(/^\s*(?:course(?:\s+name)?|subject)\s*[:\-]\s*(.+)$/i);
+        if(labeled&&labeled[1].trim()) return labeled[1].trim().slice(0,80);
+      }
+      for(var j=0;j<lines.length;j++){
+        var line=lines[j].replace(/^\s*#+\s*/,'').replace(/\*\*/g,'').trim();
+        if(line && line.length<=100 && !/\b(?:syllabus|overview|assignment|exam|quiz|week\s+\d+|unit\s+\d+|module\s+\d+)\b/i.test(line)){
+          return line.replace(/\s*[-–—]\s*(?:syllabus|course overview).*$/i,'').slice(0,80);
+        }
+      }
+      return 'Imported course';
+    }catch(e){ return 'Imported course'; }
   }
   function syllabusOfflineDate(line, startDate){
     try{
@@ -1986,26 +2246,32 @@
   }
   function syllabusParseOffline(text, startDate){
     try{
-      var lines = String(text||'').split(/\r?\n/), tasks = [];
+      var lines = String(text||'').split(/\r?\n/), tasks = [], module='';
       lines.forEach(function(line){
         try{
           var clean = line.replace(/^\s*(?:[-*•]|\d+[.)])\s*/,'').replace(/\*\*/g,'').trim();
           if(!clean) return;
+          if(/^(?:unit|module|chapter)\s+\d+\b/i.test(clean)) module=clean.slice(0,100);
           var hasMarker = /\b(?:week\s+\d+|unit\s+\d+|module\s+\d+|chapter\s+\d+|assignment|quiz|exam|project|lab)\b/i.test(clean);
           var hasDate = /\b\d{4}-\d{1,2}-\d{1,2}\b|\b\d{1,2}\/\d{1,2}\/\d{4}\b|\b\d{1,2}(?:st|nd|rd|th)?\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b|\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}\b/i.test(clean);
           if(!hasMarker && !hasDate) return;
           var priority = /\b(?:exam|assignment|quiz|project|lab)\b/i.test(clean) ? 'high' : (/\breading\b/i.test(clean) ? 'low' : 'medium');
-          tasks.push({title:clean.slice(0,200), deadline:syllabusOfflineDate(clean,startDate), priority:priority, notes:'', selected:true});
+          var title=module&&!new RegExp('^'+module.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i').test(clean)?module+': '+clean:clean;
+          tasks.push({title:title.slice(0,200), deadline:syllabusOfflineDate(clean,startDate), priority:priority, notes:'', selected:true});
         }catch(e){}
       });
       return tasks;
     }catch(e){ throw new Error('The basic parser could not read the syllabus.'); }
   }
+  /* ===== SYLLABUS STRUCTURED IMPORT END ===== */
   function syllabusIsDuplicate(task){
     try{
       var title = String(task.title||'').trim().toLowerCase();
       return !!title && state.items.some(function(item){
-        return String(item.title||'').trim().toLowerCase()===title && (item.deadline||null)===(task.deadline||null);
+        var matches=String(item.title||'').trim().toLowerCase()===title && (item.deadline||null)===(task.deadline||null);
+        return matches || (Array.isArray(item.subtasks)&&item.subtasks.some(function(sub){
+          return String(sub.title||'').trim().toLowerCase()===title && (sub.deadline||'')===(task.deadline||'');
+        }));
       });
     }catch(e){ return false; }
   }
@@ -2015,7 +2281,7 @@
   }
   function syllabusUpdateCount(){
     try{
-      $('syllabusCount').textContent = syllabusSelectedCount()+' of '+syllabusTasks.length+' tasks selected.'+(syllabusNotice?' '+syllabusNotice:'');
+      $('syllabusCount').textContent = syllabusSelectedCount()+' of '+syllabusTasks.length+' subtasks selected.'+(syllabusNotice?' '+syllabusNotice:'');
       $('syllabusAddBtn').disabled = syllabusSelectedCount()===0;
     }catch(e){ syllabusMessage('Could not update the task preview.',true); }
   }
@@ -2023,18 +2289,21 @@
     try{
       $('syllabusInputView').style.display='none';
       $('syllabusPreviewView').style.display='';
+      $('syllabusSortLabel').textContent=syllabusSortText;
+      $('syllabusPreviewCourse').value=syllabusCourseName;
       $('syllabusPreviewList').innerHTML = syllabusTasks.map(function(task,index){
-        var duplicate = syllabusIsDuplicate(task);
-        if(duplicate) task.selected = false;
+        var duplicate=syllabusIsDuplicate(task);
+        if(duplicate) task.selected=false;
         var past = task.deadline && task.deadline<todayISO();
         return '<div class="syllabus-preview-row" data-syllabus-index="'+index+'">'+
-          '<input type="checkbox" class="syllabus-select" aria-label="Select task" '+(task.selected?'checked':'')+'>'+
-          '<input type="text" class="syllabus-title" maxlength="200" value="'+esc(task.title)+'" aria-label="Task title">'+
+          '<input type="checkbox" class="syllabus-select" aria-label="Select subtask" '+(task.selected?'checked':'')+'>'+
+          '<input type="text" class="syllabus-title" maxlength="200" value="'+esc(task.title)+'" aria-label="Subtask title">'+
           '<input type="date" class="syllabus-deadline" value="'+esc(task.deadline||'')+'" aria-label="Deadline">'+
           '<select class="syllabus-priority" aria-label="Priority"><option value="low"'+(task.priority==='low'?' selected':'')+'>Low</option><option value="medium"'+(task.priority==='medium'?' selected':'')+'>Medium</option><option value="high"'+(task.priority==='high'?' selected':'')+'>High</option></select>'+
           ((duplicate||past)?'<div class="syllabus-row-meta">'+(duplicate?'<span class="syllabus-warning syllabus-duplicate">Possible duplicate</span>':'')+(duplicate&&past?' · ':'')+(past?'<span class="syllabus-warning">Deadline is in the past</span>':'')+'</div>':'')+
           '</div>';
       }).join('');
+      $('syllabusPreviewCourse').oninput=function(){ try{ syllabusCourseName=this.value.slice(0,80); }catch(e){ syllabusMessage('Could not update the course name.',true); } };
       $('syllabusPreviewList').querySelectorAll('.syllabus-preview-row').forEach(function(row){
         try{
           var task = syllabusTasks[+row.dataset.syllabusIndex];
@@ -2047,7 +2316,7 @@
             try{
               task.title=this.value.slice(0,200);
               var duplicate=syllabusIsDuplicate(task), past=task.deadline&&task.deadline<todayISO(), meta=row.querySelector('.syllabus-row-meta');
-              if(duplicate && task.selected){ task.selected=false; check.checked=false; }
+              if(duplicate&&task.selected){ task.selected=false; check.checked=false; }
               if(duplicate||past){
                 if(!meta){ meta=document.createElement('div'); meta.className='syllabus-row-meta'; row.appendChild(meta); }
                 meta.innerHTML=(duplicate?'<span class="syllabus-warning syllabus-duplicate">Possible duplicate</span>':'')+(duplicate&&past?' · ':'')+(past?'<span class="syllabus-warning">Deadline is in the past</span>':'');
@@ -2091,13 +2360,15 @@
       $('syllabusPreviewView').style.display='none';
       syllabusTasks=[];
       syllabusNotice='';
+      syllabusCourseName='';
+      syllabusSortText='';
       syllabusMessage('');
     }catch(e){ toast('Could not close the syllabus importer.'); }
   }
-  function syllabusShowUndo(ids, snapshot){
+  function syllabusShowUndo(parentId, course, count){
     try{
-      syllabusUndo={ids:ids.slice(), before:snapshot.slice()};
-      $('syllabusUndoText').textContent=ids.length+' task'+(ids.length===1?'':'s')+' added.';
+      syllabusUndo={id:parentId};
+      $('syllabusUndoText').textContent=course+' added with '+count+' subtask'+(count===1?'':'s')+'.';
       $('syllabusUndoToast').classList.add('show');
       clearTimeout(syllabusUndoTimer);
       syllabusUndoTimer=setTimeout(function(){
@@ -2120,6 +2391,8 @@
           $('syllabusPreviewView').style.display='none';
           syllabusTasks=[];
           syllabusNotice='';
+          syllabusCourseName='';
+          syllabusSortText='';
           syllabusMessage('');
           $('syllabusModal').classList.add('show');
           $('syllabusText').focus();
@@ -2161,37 +2434,43 @@
           if(bounded.truncated) $('syllabusText').value=bounded.text;
           var start=$('syllabusStart').value||todayISO();
           if(!syllabusDateIsValid(start)){ syllabusMessage('Choose a valid start date.',true); return; }
-          var parsed=[], offline=!aiReady();
+          var parsed={course:'',tasks:[]}, offline=!aiReady(), fallbackReason=offline?'No AI key configured.':'';
           syllabusNotice=bounded.truncated?'Text shortened to 20,000 characters.':'';
           if(!offline){
             syllabusMessage('Creating a task list with '+providerLabel()+'…');
             try{
-              var prompt='Extract course work from the text below. Respond with ONLY a JSON array, no markdown or explanation. Each item must have exactly this shape: {"title":"short clear title","deadline":"YYYY-MM-DD or null","priority":"high|medium|low","notes":"brief useful context or empty string"}. Create one task per assignment, exam, project, lab, reading block, or weekly topic. Resolve relative dates such as "Week 4" and "next Friday" from the supplied course start date ('+start+'). Do not invent dates that are not implied by the text. Exams and graded deliverables are high priority; weekly readings are low priority. Course name: '+($('syllabusCourse').value.trim()||'not provided')+'.\n\nCOURSE TEXT:\n'+bounded.text;
+              var prompt='Extract course work from the text below. Respond with ONLY JSON in this exact shape: {"course":"string","tasks":[{"title":"string","deadline":"YYYY-MM-DD or null","priority":"high|medium|low","notes":"string"}]}. Create one subtask per assignment, exam, project, lab, quiz, reading block or weekly topic. Use short clear titles. If modules or units are explicit, prefix each item title with its module or unit. Resolve relative dates such as "Week 4" and "next Friday" from the supplied start date ('+start+'). Never invent dates that are not implied by the text. Exams and graded work are high priority; readings are low priority. Course name: '+($('syllabusCourse').value.trim()||'not provided; infer it from the syllabus')+'.\n\nCOURSE TEXT:\n'+bounded.text;
               var timeout;
               var reply;
               try{
                 reply=await Promise.race([callAI(prompt),new Promise(function(resolve,reject){ timeout=setTimeout(function(){ reject(new Error('AI request timed out.')); },20000); })]);
               }finally{ clearTimeout(timeout); }
               parsed=syllabusParseAI(reply);
-              if(!parsed.length) throw new Error('The AI returned no usable tasks.');
-            }catch(e){ offline=true; }
+              if(!parsed.tasks.length) throw new Error('AI returned no usable tasks.');
+            }catch(e){ offline=true; fallbackReason=String(e&&e.message||'AI request failed.').slice(0,100); }
           }
           if(offline){
-            parsed=syllabusParseOffline(bounded.text,start);
-            syllabusNotice+=(syllabusNotice?' ':'')+'Basic parser used; add an AI key in Settings for better results.';
+            parsed={course:'',tasks:syllabusParseOffline(bounded.text,start)};
+            parsed.course=$('syllabusCourse').value.trim()||syllabusInferCourse(bounded.text);
+            syllabusSortText=fallbackReason==='No AI key configured.'
+              ? 'Sorted by basic parser (add an AI key in Settings for better results)'
+              : 'Sorted by basic parser (AI failed: '+fallbackReason+')';
+          }else{
+            syllabusSortText='Sorted by AI ('+providerLabel()+')';
           }
           if(run!==syllabusRunId) return;
-          if(parsed.length>100){
-            parsed=parsed.slice(0,100);
+          if(parsed.tasks.length>100){
+            parsed.tasks=parsed.tasks.slice(0,100);
             syllabusNotice+=(syllabusNotice?' ':'')+'Only the first 100 tasks are shown.';
           }
-          if(!parsed.length){ syllabusMessage((offline?'Basic parser found no task-like lines. ':'No usable tasks were found.')+syllabusNotice,true); return; }
-          var course=$('syllabusCourse').value.trim();
-          syllabusTasks=parsed.map(function(task){
+          if(!parsed.tasks.length){ syllabusMessage((offline?'Basic parser found no task-like lines. ':'No usable tasks were found.')+syllabusNotice,true); return; }
+          syllabusCourseName=$('syllabusCourse').value.trim()||parsed.course||syllabusInferCourse(bounded.text);
+          syllabusTasks=parsed.tasks.map(function(task){
             task.title=String(task.title||'').trim().slice(0,200);
-            task.deadline=syllabusDateIsValid(task.deadline)?task.deadline:null;
-            task.category=course.slice(0,80)||'Other';
-            task.selected=!syllabusIsDuplicate(task);
+            task.deadline=syllabusDateIsValid(task.deadline)?task.deadline:'';
+            task.priority=['high','medium','low'].indexOf(task.priority)>=0?task.priority:'medium';
+            task.notes=String(task.notes||'').slice(0,1000);
+            task.selected=true;
             return task;
           });
           syllabusRenderPreview();
@@ -2205,23 +2484,28 @@
       $('syllabusAddBtn').onclick=async function(){
         try{
           var selected=syllabusTasks.filter(function(task){ return task.selected && task.title.trim(); });
-          if(!selected.length){ syllabusMessage('Select at least one task with a title.',true); return; }
+          if(!selected.length){ syllabusMessage('Select at least one subtask with a title.',true); return; }
           if(selected.length>100) selected=selected.slice(0,100);
+          var course=String($('syllabusPreviewCourse').value||syllabusCourseName).trim().slice(0,80);
+          if(!course){ syllabusMessage('Enter a course name.',true); return; }
           var snapshot=state.items.slice();
-          var records=selected.map(function(task){
-            var estimate=30;
-            return {id:uid(),title:task.title.trim().slice(0,200),type:'project',category:task.category||'Other',
-              subject:'',estMinutes:estimate,remainingMinutes:estimate,
-              priority:task.priority==='high'?5:(task.priority==='low'?1:3),
-              deadline:syllabusDateIsValid(task.deadline)?task.deadline:null,status:'pending',createdAt:Date.now()};
+          var subtasks=selected.map(function(task){
+            return {id:uid(),title:task.title.trim().slice(0,200),
+              deadline:syllabusDateIsValid(task.deadline)?task.deadline:'',
+              priority:task.priority,notes:String(task.notes||'').slice(0,1000),done:false};
           });
-          state.items=state.items.concat(records);
+          var highest=subtasks.some(function(sub){ return sub.priority==='high'; })?'high':(subtasks.some(function(sub){ return sub.priority==='medium'; })?'medium':'low');
+          var latest=subtasks.map(function(sub){ return sub.deadline; }).filter(Boolean).sort().pop()||null;
+          var estimate=Math.max(30,subtasks.length*30);
+          var parent={id:uid(),title:course,type:'project',category:course,subject:'',
+            estMinutes:estimate,remainingMinutes:estimate,priority:highest==='high'?5:(highest==='low'?1:3),
+            deadline:latest,status:'pending',createdAt:Date.now(),notes:'Imported from syllabus',subtasks:subtasks};
+          state.items=state.items.concat([parent]);
           await saveItems();
-          var ids=records.map(function(item){ return item.id; });
-          if(!await syllabusStoredItemsContain(ids,true)){
+          if(!await syllabusStoredItemsContain([parent.id],true)){
             state.items=snapshot;
             await saveItems();
-            syllabusMessage('Could not save tasks. Your task list was left unchanged.',true);
+            syllabusMessage('Could not save the course. Your task list was left unchanged.',true);
             return;
           }
           syllabusClose();
@@ -2229,30 +2513,18 @@
           renderCalendar();
           renderTimeline();
           renderNow();
-          syllabusShowUndo(ids,snapshot);
-          toast(records.length+' task'+(records.length===1?'':'s')+' added.');
-        }catch(e){ syllabusMessage('Could not save tasks. Your task list was left unchanged.',true); }
+          syllabusShowUndo(parent.id,course,subtasks.length);
+          toast('Course imported with '+subtasks.length+' subtask'+(subtasks.length===1?'':'s')+'.');
+        }catch(e){ syllabusMessage('Could not save the course. Your task list was left unchanged.',true); }
       };
       $('syllabusUndoBtn').onclick=async function(){
         try{
           if(!syllabusUndo) return;
-          var ids=syllabusUndo.ids.slice(), beforeUndo=state.items.slice();
-          state.items=state.items.filter(function(item){ return ids.indexOf(item.id)<0; });
-          todaysPlan=todaysPlan.filter(function(block){ return ids.indexOf(block.itemId)<0; });
-          await saveItems();
-          if(!await syllabusStoredItemsContain(ids,false)){
-            state.items=beforeUndo;
-            await saveItems();
-            toast('Undo could not be saved. Your task list was left unchanged.');
-            return;
-          }
+          var parentId=syllabusUndo.id;
+          if(!await deleteTask(parentId,true)) return;
           clearTimeout(syllabusUndoTimer);
           syllabusUndo=null;
           $('syllabusUndoToast').classList.remove('show');
-          refreshAll();
-          renderCalendar();
-          renderTimeline();
-          renderNow();
           toast('Import undone.');
         }catch(e){ toast('Could not undo the import.'); }
       };
